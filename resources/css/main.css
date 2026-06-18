@@ -1,0 +1,14 @@
+/* Custom Teal Theme */
+.main-sidebar { background-color: #f4f6f9 !important; } /* Sidebar terang sesuai gambar */
+.sidebar-light-teal .nav-sidebar > .nav-item > .nav-link.active {
+    background-color: #008080 !important;
+    color: #fff !important;
+}
+.brand-link, .navbar-teal {
+    background-color: #008080 !important;
+    color: #ffffff !important;
+}
+.card-teal { border-top: 3px solid #008080; }
+.text-teal { color: #008080 !important; }
+.btn-teal { background-color: #008080; color: white; }
+.btn-teal:hover { background-color: #006666; color: white; }
