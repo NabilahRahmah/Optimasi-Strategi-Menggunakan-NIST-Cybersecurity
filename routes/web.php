@@ -11,18 +11,18 @@ use App\Http\Controllers\SuperAdmin\UserController as SuperAdminUserController;
 
 //Admin
 use App\Http\Controllers\Admin\DashboardController as AdminDashboard;
-use App\Http\Controllers\Admin\DokpendukungController as AdminDokpendukungController;
+// use App\Http\Controllers\Admin\DokpendukungController as AdminDokpendukungController;
 use App\Http\Controllers\Admin\AssessmentController as AdminAssessmentController;
 
 
 //Approver
 use App\Http\Controllers\Approver\DashboardController as ApproverDashboard;
 use App\Http\Controllers\Approver\VerifikasiController;
-use App\Http\Controllers\Approver\DokpendukungController as ApproverDokpendukungController;
+// use App\Http\Controllers\Approver\DokpendukungController as ApproverDokpendukungController;
 
 //User
 use App\Http\Controllers\User\DashboardController as UserDashboard;
-use App\Http\Controllers\User\DokpendukungController as UserDokpendukungController;
+// use App\Http\Controllers\User\DokpendukungController as UserDokpendukungController;
 use App\Http\Controllers\User\HasilController as UserHasilController;
 use App\Http\Controllers\User\AssessmentController as UserAssessmentController;
 
@@ -123,15 +123,15 @@ Route::middleware(['auth', 'role:admin'])
         Route::delete('/assessment/pertanyaan/{id}', [AdminAssessmentController::class, 'destroyPertanyaan'])->name('admin.pertanyaan.destroy');
         Route::post('/assessment/{framework_id}/jawaban', [AdminAssessmentController::class, 'saveJawaban'])->name('admin.assessment.saveJawaban');
 
-        // Dokumen Pendukung → folder admin/dokpendukung
-        Route::get('/dokpendukung', [AdminDokpendukungController::class, 'index'])->name('admin.dokpendukung.index');
-        Route::get('/dokpendukung/create', [AdminDokpendukungController::class, 'create'])->name('admin.dokpendukung.create');
-        Route::post('/dokpendukung', [AdminDokpendukungController::class, 'store'])->name('admin.dokpendukung.store');
+        // // Dokumen Pendukung → folder admin/dokpendukung
+        // Route::get('/dokpendukung', [AdminDokpendukungController::class, 'index'])->name('admin.dokpendukung.index');
+        // Route::get('/dokpendukung/create', [AdminDokpendukungController::class, 'create'])->name('admin.dokpendukung.create');
+        // Route::post('/dokpendukung', [AdminDokpendukungController::class, 'store'])->name('admin.dokpendukung.store');
 
-        // ← Route dengan {id} SELALU paling bawah!
-        Route::get('/dokpendukung/{id}/preview', [AdminDokpendukungController::class, 'preview'])->name('admin.dokpendukung.preview');
-        Route::get('/dokpendukung/{id}/download', [AdminDokpendukungController::class, 'download'])->name('admin.dokpendukung.download');
-        Route::delete('/dokpendukung/{id}', [AdminDokpendukungController::class, 'destroy'])->name('admin.dokpendukung.destroy');
+        // // ← Route dengan {id} SELALU paling bawah!
+        // Route::get('/dokpendukung/{id}/preview', [AdminDokpendukungController::class, 'preview'])->name('admin.dokpendukung.preview');
+        // Route::get('/dokpendukung/{id}/download', [AdminDokpendukungController::class, 'download'])->name('admin.dokpendukung.download');
+        // Route::delete('/dokpendukung/{id}', [AdminDokpendukungController::class, 'destroy'])->name('admin.dokpendukung.destroy');
     });
 
 // ==========================================
@@ -148,6 +148,8 @@ Route::middleware(['auth', 'role:approver'])
             ->name('approver.verifikasi.index');
         Route::get('/verifikasi/approved', [VerifikasiController::class, 'approved'])
             ->name('approver.verifikasi.approved');
+        Route::post('/verifikasi/{assessment_id}/jawaban', [VerifikasiController::class, 'saveJawaban'])
+            ->name('approver.verifikasi.saveJawaban');
         Route::post('/verifikasi/{assessment}/finalisasi', [VerifikasiController::class, 'finalisasi'])
             ->name('approver.verifikasi.finalisasi');
         Route::get('/verifikasi/{assessment}', [VerifikasiController::class, 'show'])
@@ -186,24 +188,26 @@ Route::middleware(['auth', 'role:user'])
             ->name('assessment.create');
         Route::post('/assessment/store', [UserAssessmentController::class, 'store'])
             ->name('assessment.store');
+        Route::post('/assessment/{assessment_id}/jawaban', [UserAssessmentController::class, 'saveJawaban'])
+            ->name('assessment.saveJawaban');
         Route::get('/assessment/{assessment}/revisi', [UserAssessmentController::class, 'revisi'])
             ->name('assessment.revisi');
         Route::post('/assessment/{assessment}/revisi', [UserAssessmentController::class, 'simpanRevisi'])
             ->name('assessment.simpanRevisi');
 
-        // Dokumen Pendukung → folder user/dokpendukung
-        Route::get('/dokpendukung', [UserDokpendukungController::class, 'index'])
-            ->name('user.dokpendukung.index');
-        Route::get('/dokpendukung/create', [UserDokpendukungController::class, 'create'])
-            ->name('user.dokpendukung.create');
-        Route::post('/dokpendukung', [UserDokpendukungController::class, 'store'])
-            ->name('user.dokpendukung.store');
-        Route::delete('/dokpendukung/{id}', [UserDokpendukungController::class, 'destroy'])
-            ->name('user.dokpendukung.destroy');
-        Route::get('/dokpendukung/{id}/download', [UserDokpendukungController::class, 'download'])
-            ->name('user.dokpendukung.download');
-        Route::get('dokpendukung/{id}/preview', [UserDokpendukungController::class, 'preview'])
-            ->name('user.dokpendukung.preview');
+        // // Dokumen Pendukung → folder user/dokpendukung
+        // Route::get('/dokpendukung', [UserDokpendukungController::class, 'index'])
+        //     ->name('user.dokpendukung.index');
+        // Route::get('/dokpendukung/create', [UserDokpendukungController::class, 'create'])
+        //     ->name('user.dokpendukung.create');
+        // Route::post('/dokpendukung', [UserDokpendukungController::class, 'store'])
+        //     ->name('user.dokpendukung.store');
+        // Route::delete('/dokpendukung/{id}', [UserDokpendukungController::class, 'destroy'])
+        //     ->name('user.dokpendukung.destroy');
+        // Route::get('/dokpendukung/{id}/download', [UserDokpendukungController::class, 'download'])
+        //     ->name('user.dokpendukung.download');
+        // Route::get('dokpendukung/{id}/preview', [UserDokpendukungController::class, 'preview'])
+        //     ->name('user.dokpendukung.preview');
 
 
         // Hasil

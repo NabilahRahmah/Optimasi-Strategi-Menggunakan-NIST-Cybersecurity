@@ -16,9 +16,6 @@ class VerifikasiController extends Controller
     ) {
     }
 
-    /**
-     * Daftar semua assessment yang sudah disubmit & menunggu verifikasi.
-     */
     public function index()
     {
         $assessments = Assessment::with('user')
@@ -29,9 +26,7 @@ class VerifikasiController extends Controller
         return view('approver.verifikasi.index', compact('assessments'));
     }
 
-    /**
-     * Detail assessment — tampilkan semua jawaban per pertanyaan.
-     */
+   
     public function show(Assessment $assessment)
     {
         $assessment->load([

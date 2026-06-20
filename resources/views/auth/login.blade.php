@@ -11,6 +11,9 @@
         rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
         rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap"
+        rel="stylesheet" />    
 
     <style>
         *,
@@ -140,7 +143,9 @@
             display: flex;
             flex-direction: column;
             justify-content: center;
+            align-items: center;
             padding: 40px 0;
+            text-align: center;
         }
 
         .hero-tag {
@@ -157,6 +162,7 @@
             letter-spacing: 0.5px;
             margin-bottom: 28px;
             width: fit-content;
+            align-self: flex-start; 
         }
 
         .hero-tag span {
@@ -180,11 +186,11 @@
         }
 
         .hero-title {
-            font-family: 'Syne', sans-serif;
-            font-size: clamp(36px, 4vw, 56px);
-            font-weight: 800;
-            line-height: 1.05;
-            letter-spacing: -2px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(48px, 5vw, 72px);
+            font-weight: 400; 
+            line-height: 1.0;
+            letter-spacing: 2px; 
             color: white;
             margin-bottom: 20px;
         }
@@ -201,6 +207,7 @@
             color: var(--muted);
             max-width: 400px;
             font-weight: 300;
+            text-align: center; 
         }
 
         .stats {
@@ -247,12 +254,13 @@
         }
 
         .form-title {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Bebas Neue', sans-serif;
             font-size: 28px;
-            font-weight: 800;
-            letter-spacing: -1px;
+            font-weight: 400;
+            letter-spacing: 2px;
             color: white;
             margin-bottom: 8px;
+            text-align: center;
         }
 
         .form-sub {
@@ -553,24 +561,24 @@
                     <div class="brand-name">CyberAudit</div>
                     <div class="brand-sub">Sistem Informasi Pra-Audit</div>
                 </div>
+            </div><br>
+
+            <div class="hero-tag">
+                    <br><span></span>
+                    Berbasis NIST CSF 2.0 
             </div>
 
             <div class="hero">
-                <div class="hero-tag">
-                    <span></span>
-                    Berbasis NIST CSF 2.0 & Standar Keamanan Siber Nasional
-                </div>
                 <h1 class="hero-title">
-                    Keamanan Siber<br>
-                    yang <em>Terukur</em><br>
-                    & Terstruktur
+                    Keamanan Siber Yang<br>
+                    <em>Terukur</em> & Terstruktur<br>
                 </h1>
                 <p class="hero-desc">
                     Platform penilaian mandiri keamanan siber untuk perusahaan telekomunikasi, terintegrasi dengan
                     standar nasional dan internasional.
                 </p>
 
-                <div class="stats">
+                <!-- <div class="stats">
                     <div class="stat-item">
                         <div class="stat-num">181+</div>
                         <div class="stat-label">Kriteria Penilaian</div>
@@ -583,7 +591,7 @@
                         <div class="stat-num">4</div>
                         <div class="stat-label">Level Tier</div>
                     </div>
-                </div>
+                </div> -->
             </div>
 
             <div class="footer-text">

@@ -62,7 +62,7 @@
             'admin' => [
                 ['label' => 'Dashboard',         'route' => 'admin.dashboard',       'icon' => 'dashboard'],
                 ['label' => 'Assessment',        'route' => 'admin.assessment.index',  'icon' => 'fact_check'],
-                ['label' => 'Dokumen Pendukung', 'route' => 'admin.dokpendukung.index',  'icon' => 'folder_open'],
+                // ['label' => 'Dokumen Pendukung', 'route' => 'admin.dokpendukung.index',  'icon' => 'folder_open'],
             ],
             'approver' => [
                 ['label' => 'Dashboard',        'route' => 'approver.dashboard',         'icon' => 'dashboard'],
@@ -73,7 +73,7 @@
             default => [
                 ['label' => 'Dashboard',         'route' => 'user.dashboard',        'icon' => 'dashboard'],
                 ['label' => 'Self Assessment',   'route' => 'assessment.create',     'icon' => 'fact_check'],
-                ['label' => 'Dokumen Pendukung', 'route' => 'user.dokpendukung.index',    'icon' => 'folder_open'],
+                // ['label' => 'Dokumen Pendukung', 'route' => 'user.dokpendukung.index',    'icon' => 'folder_open'],
                 ['label' => 'Hasil Assessment',  'route' => 'user.hasil.index',      'icon' => 'bar_chart'],
             ],
         };

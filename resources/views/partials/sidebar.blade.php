@@ -18,9 +18,8 @@
             [
                 'section' => 'Konfigurasi',
                 'items'   => [
-                    ['label' => 'Dashboard',         'route' => 'admin.dashboard',       'mark' => 'DB', 'badge' => null],
-                    ['label' => 'Checklist NIST CSF','route' => 'kategori.index', 'mark' => 'CK', 'badge' => null],
-                    ['label' => 'Dokumen Pendukung', 'route' => 'admin.dokpendukung.index',   'mark' => 'DP', 'badge' => null],
+                    ['label' => 'Dashboard', 'route' => 'admin.dashboard', 'mark' => 'DB', 'badge' => null],
+                    ['label' => 'Assessment','route' => 'assessment.index', 'mark' => 'CK', 'badge' => null],
                 ],
             ],
         ],
@@ -41,8 +40,6 @@
                 'items'   => [
                     ['label' => 'Dashboard',      'route' => 'user.dashboard',        'mark' => 'DB', 'badge' => null],
                     ['label' => 'Self Assessment','route' => 'assessment.create',     'mark' => 'SA', 'badge' => null], 
-                    ['label' => 'Dokumen Pendukung', 'route' => 'user.dokpendukung.index',   'mark' => 'DP', 'badge' => null],
-                    ['label' => 'Upload Dokumen', 'route' => 'user.dokpendukung.index',    'mark' => 'UD', 'badge' => null],
                     ['label' => 'Hasil Saya',     'route' => 'user.hasil.index',      'mark' => 'HS', 'badge' => null],
                 ],
             ],

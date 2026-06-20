@@ -13,15 +13,53 @@ use Illuminate\Http\Request;
 
 class AssessmentController extends Controller
 {
-    public function create()
+    public function pilihFramework()
     {
-        $domains = Domain::with([
-            'kategoris.pertanyaans' => function ($q) {
-                $q->orderBy('kode_pertanyaan');
-            }
-        ])->orderBy('kode_domain')->get();
+        $frameworks = auth()->user()->assignedFrameworks()
+            ->where('is_active', true)
+            ->get();
 
-        $assessment = Assessment::where('user_id', auth()->user()->user_id)
+        return view('assessment.pilih-framework', compact('frameworks'));
+    }
+
+    public function create(Request $request)
+    {
+        $user = auth()->user();
+
+        $frameworkId = $request->query('framework_id');
+
+        // Validasi: framework yang diminta harus salah satu yang di-assign ke user ini
+        if ($frameworkId && !$user->isAssignedTo($frameworkId)) {
+            abort(403, 'Anda tidak memiliki akses ke framework ini.');
+        }
+
+        // Kalau tidak ada framework_id di query string, coba ambil dari assessment draft yang sedang berjalan
+        if (!$frameworkId) {
+            $draft = Assessment::where('user_id', $user->user_id)
+                ->where('status', 'draft')
+                ->latest()
+                ->first();
+
+            $frameworkId = $draft?->framework_id;
+        }
+
+        // Masih kosong juga? Berarti user belum pilih framework — lempar ke halaman pilih
+        if (!$frameworkId) {
+            return redirect()->route('assessment.pilihFramework')
+                ->with('error', 'Silakan pilih framework terlebih dahulu.');
+        }
+
+        $domains = Domain::where('framework_id', $frameworkId)
+            ->with([
+                'kategoris.pertanyaans' => function ($q) {
+                    $q->orderBy('kode_pertanyaan');
+                }
+            ])
+            ->orderBy('kode_domain')
+            ->get();
+
+        $assessment = Assessment::where('user_id', $user->user_id)
+            ->where('framework_id', $frameworkId)
             ->where('status', 'draft')
             ->with('jawabans')
             ->latest()
@@ -29,8 +67,8 @@ class AssessmentController extends Controller
 
         if (!$assessment) {
             $assessment = Assessment::create([
-                'user_id' => auth()->user()->user_id,
-                'framework_id' => 1,
+                'user_id' => $user->user_id,
+                'framework_id' => $frameworkId,
                 'judul_assessment' => 'Self Assessment Q' . now()->quarter . ' ' . now()->year,
                 'tgl_pelaksanaan' => now()->toDateString(),
                 'status' => 'draft',
@@ -45,6 +83,7 @@ class AssessmentController extends Controller
     public function store(Request $request)
     {
         $request->validate([
+            'assessment_id' => 'required|exists:assessments,assessment_id',
             'judul_assessment' => 'required|string|max:255',
             'scores' => 'nullable|array',
             'scores.*' => 'nullable|integer|min:0|max:5',
@@ -52,6 +91,7 @@ class AssessmentController extends Controller
         ]);
 
         $assessment = Assessment::where('user_id', auth()->user()->user_id)
+            ->where('assessment_id', $request->assessment_id)
             ->where('status', 'draft')
             ->firstOrFail();
 

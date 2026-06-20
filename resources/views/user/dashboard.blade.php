@@ -32,7 +32,7 @@
                 <p class="text-[10px] font-bold uppercase tracking-wider text-gray-400">Assessment Aktif</p>
             </div>
             <div class="mt-2 text-4xl font-black tracking-tight text-slate-800">{{ $total_assessment ?? 0 }}</div>
-            <p class="mt-2 text-xs text-gray-500">Total assessment yang pernah dibuat</p>
+            <p class="mt-2 text-xs text-gray-500">Assessment yang berlangsung</p>
             <div class="absolute bottom-0 left-0 h-1 w-full bg-blue-500"></div>
         </div>
 

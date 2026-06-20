@@ -67,6 +67,8 @@ class AssessmentController extends Controller
             'deskripsi' => 'nullable|string',
         ]);
 
+        $domain = Domain::findOrFail($request->domain_id);
+
         Kategori::create([
             'domain_id' => $request->domain_id,
             'kode_kategori' => $request->kode_kategori,
@@ -74,8 +76,8 @@ class AssessmentController extends Controller
             'deskripsi' => $request->deskripsi,
         ]);
 
-        return redirect()->route('admin.assessment.index')
-            ->with('success', 'Kategori berhasil ditambahkan!');
+         return redirect()->route('admin.assessment.edit', $domain->framework_id)   
+        ->with('success', 'Kategori berhasil ditambahkan!');
     }
 
     public function edit($id)
@@ -174,9 +176,11 @@ class AssessmentController extends Controller
 
     public function editPertanyaan($id)
     {
-        $pertanyaan = Pertanyaan::findOrFail($id);
+        $pertanyaan = Pertanyaan::with('kategori.domain')->findOrFail($id);
         $kategoris = Kategori::with('domain')->orderBy('kode_kategori')->get();
-        return view('admin.assessment.pertanyaan_edit', compact('pertanyaan', 'kategoris'));
+        $frameworkId = $pertanyaan->kategori?->domain?->framework_id;
+
+        return view('admin.assessment.pertanyaan_edit', compact('pertanyaan', 'kategoris', 'frameworkId'));
     }
 
     public function updatePertanyaan(Request $request, $id)
@@ -197,14 +201,20 @@ class AssessmentController extends Controller
             'deskripsi' => $request->deskripsi,
         ]);
 
-        return redirect()->route('admin.assessment.index')
+        $kategori = Kategori::with('domain')->findOrFail($request->kategori_id);
+
+        return redirect()->route('admin.assessment.edit', $kategori->domain->framework_id)
             ->with('success', 'Pertanyaan berhasil diperbarui!');
     }
 
     public function destroyPertanyaan($id)
     {
-        Pertanyaan::findOrFail($id)->delete();
-        return redirect()->route('admin.assessment.index')
+        $pertanyaan = Pertanyaan::with('kategori.domain')->findOrFail($id);
+        $frameworkId = $pertanyaan->kategori?->domain?->framework_id;
+
+        $pertanyaan->delete();
+
+        return redirect()->route('admin.assessment.edit', $frameworkId)
             ->with('success', 'Pertanyaan berhasil dihapus!');
     }
 
@@ -267,6 +277,29 @@ class AssessmentController extends Controller
         $jawaban->update($data);
 
         return response()->json(['success' => true]);
+    }
+
+    public function previewFile($jawaban_id)
+    {
+        $jawaban = AssessmentJawaban::findOrFail($jawaban_id);
+        $fullPath = storage_path('app/' . $jawaban->file_bukti);
+
+        if (!$jawaban->file_bukti || !file_exists($fullPath)) {
+            abort(404, 'File tidak ditemukan.');
+        }
+
+        $ext = strtolower(pathinfo($jawaban->nama_file_asli, PATHINFO_EXTENSION));
+        $mimeMap = [
+            'pdf' => 'application/pdf',
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+        ];
+
+        return response()->file($fullPath, [
+            'Content-Type' => $mimeMap[$ext] ?? 'application/octet-stream',
+            'Content-Disposition' => 'inline; filename="' . $jawaban->nama_file_asli . '"',
+        ]);
     }
 
     // ══════════════════════════════════════

@@ -10,7 +10,7 @@
     </nav>
 
     @if(session('success'))
-        <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+        <div id="flash-success" class="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
             {{ session('success') }}
         </div>
     @endif
@@ -29,7 +29,7 @@
         {{-- Header Kolom Tabel --}}
         <div class="border-b bg-red-50/80">
             <div class="grid text-xs font-semibold text-gray-600 px-4 py-2.5"
-                style="grid-template-columns: 160px 1fr 160px 130px 140px 160px 80px;">
+                style="grid-template-columns: 150px 1fr 180px 130px 140px 160px 80px;">
                 <div>No</div>
                 <div>Question</div>
                 <div class="text-center">Evidence & Supporting Doc</div>
@@ -43,25 +43,23 @@
         {{-- Loop per Domain --}}
         @forelse($framework->domains as $domain)
 
-            {{-- ── Domain Header ── --}}
+            {{-- Domain Header --}}
             <div class="flex items-center justify-between px-4 py-2 bg-gray-200 border-b border-gray-300">
                 <div class="flex items-center gap-2">
                     <span class="font-mono text-xs font-bold text-gray-700 bg-white border border-gray-300 px-2 py-0.5 rounded">{{ $domain->kode_domain }}</span>
                     <span class="text-sm font-bold text-gray-700">{{ $domain->nama_domain }}</span>
                     <span class="text-xs text-gray-400">({{ $domain->kategoris->count() }} kategori)</span>
                 </div>
-                {{-- Tombol Tambah Kategori --}}
                 <a href="{{ route('admin.assessment.create', ['domain_id' => $domain->domain_id]) }}"
                     class="inline-flex items-center rounded bg-gray-700 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-gray-900 transition-colors">
                     + Tambah Kategori
                 </a>
             </div>
 
-            {{-- Loop per Kategori dalam Domain --}}
             @forelse($domain->kategoris as $kat)
                 @php $accordionId = 'kat-' . $kat->kategori_id; @endphp
 
-                {{-- Row Kategori (accordion toggle) --}}
+                {{-- Row Kategori --}}
                 <div class="border-b">
                     <button type="button"
                         onclick="toggleAccordion('{{ $accordionId }}')"
@@ -90,18 +88,12 @@
                     <div id="{{ $accordionId }}" class="hidden">
                         @forelse($kat->pertanyaans as $ptq)
                             @php
-                                $colors = [
-                                    0=>'bg-red-100 text-red-700',
-                                    1=>'bg-orange-100 text-orange-700',
-                                    2=>'bg-yellow-100 text-yellow-700',
-                                    3=>'bg-green-100 text-green-700',
-                                    4=>'bg-blue-100 text-blue-700',
-                                    5=>'bg-purple-100 text-purple-700',
-                                ];
+                                $jawaban = $jawabans[$ptq->pertanyaan_id] ?? null;
                                 $labels = [0=>'Tidak Ada',1=>'Awal',2=>'Berulang',3=>'Terdefinisi',4=>'Terkelola',5=>'Inovatif'];
                             @endphp
                             <div class="grid border-t hover:bg-gray-50/50 transition-colors items-start py-3 px-4 gap-2"
-                                style="grid-template-columns: 160px 1fr 160px 130px 140px 160px 80px;">
+                                style="grid-template-columns: 150px 1fr 180px 130px 140px 160px 80px;"
+                                id="row-{{ $ptq->pertanyaan_id }}">
 
                                 {{-- No --}}
                                 <div class="font-mono text-xs font-bold text-primary pt-0.5">
@@ -112,45 +104,80 @@
                                 <div>
                                     <p class="font-medium text-gray-800 text-xs leading-relaxed">{{ $ptq->judul }}</p>
                                     @if($ptq->deskripsi)
-                                        <p class="text-[11px] text-gray-400 mt-0.5 leading-relaxed">{{ Str::limit($ptq->deskripsi, 100) }}</p>
+                                        <p class="text-[11px] text-gray-400 mt-0.5">{{ Str::limit($ptq->deskripsi, 100) }}</p>
                                     @endif
                                 </div>
 
                                 {{-- Evidence --}}
                                 <div class="flex flex-col gap-1.5">
+                                    @if($jawaban?->nama_file_asli)
+                                        <span class="text-[11px] text-gray-600 font-medium truncate max-w-[160px]" title="{{ $jawaban->nama_file_asli }}">
+                                            📎 {{ $jawaban->nama_file_asli }}
+                                        </span>
+                                    @endif
                                     <label class="inline-flex items-center gap-1.5 cursor-pointer rounded border border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100 px-2.5 py-1.5 text-[11px] text-gray-500 transition-colors">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                                             <polyline points="17 8 12 3 7 8"/>
                                             <line x1="12" y1="3" x2="12" y2="15"/>
                                         </svg>
-                                        Upload Dokumen
-                                        <input type="file" class="hidden" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+                                        {{ $jawaban?->nama_file_asli ? 'Ganti File' : 'Upload Dokumen' }}
+                                        <input type="file"
+                                            class="hidden file-input"
+                                            data-pertanyaan-id="{{ $ptq->pertanyaan_id }}"
+                                            data-framework-id="{{ $framework->framework_id }}"
+                                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
                                     </label>
-                                    <span class="text-[10px] text-gray-300 italic">Belum ada dokumen</span>
+                                    <span id="file-status-{{ $ptq->pertanyaan_id }}" class="text-[10px] text-gray-400 italic"></span>
                                 </div>
 
                                 {{-- Index dropdown --}}
                                 <div class="flex justify-center">
-                                    <select class="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary/40 text-gray-700 w-full max-w-[110px]">
+                                    <select
+                                        class="index-select text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary/40 text-gray-700 w-full max-w-[110px]"
+                                        data-pertanyaan-id="{{ $ptq->pertanyaan_id }}"
+                                        data-framework-id="{{ $framework->framework_id }}">
                                         <option value="">— Pilih —</option>
                                         @foreach($labels as $val => $lbl)
-                                            <option value="{{ $val }}">{{ $val }} – {{ $lbl }}</option>
+                                            <option value="{{ $val }}"
+                                                {{ $jawaban?->indeks_nilai === $val ? 'selected' : '' }}>
+                                                {{ $val }} – {{ $lbl }}
+                                            </option>
                                         @endforeach
                                     </select>
                                 </div>
 
                                 {{-- Current Status --}}
                                 <div class="flex justify-center">
-                                    <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-amber-50 text-amber-600 border border-amber-200">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span>
-                                        Pending
+                                    @php
+                                        $status = $jawaban?->status_verifikasi ?? 'pending';
+                                        $statusMap = [
+                                            'pending' => ['bg-amber-50 text-amber-600 border-amber-200', 'bg-amber-400', 'Pending'],
+                                            'approved' => ['bg-green-50 text-green-600 border-green-200', 'bg-green-400', 'Approved'],
+                                            'ditolak' => ['bg-red-50 text-red-600 border-red-200', 'bg-red-400', 'Revision'],
+                                        ];
+                                        [$cls, $dot, $label] = $statusMap[$status] ?? $statusMap['pending'];
+                                    @endphp
+                                    <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border {{ $cls }}">
+                                        <span class="w-1.5 h-1.5 rounded-full {{ $dot }} inline-block"></span>
+                                        {{ $label }}
                                     </span>
                                 </div>
 
                                 {{-- Approver Comment --}}
                                 <div>
-                                    <span class="text-[11px] text-gray-300 italic">—</span>
+                                    <textarea
+                                        class="comment-input w-full text-[11px] border border-gray-200 rounded px-2 py-1 bg-white resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 text-gray-700"
+                                        rows="2"
+                                        placeholder="Tulis komentar..."
+                                        data-pertanyaan-id="{{ $ptq->pertanyaan_id }}"
+                                        data-framework-id="{{ $framework->framework_id }}">{{ $jawaban?->komentar_approver }}</textarea>
+                                    <button type="button"
+                                        class="save-comment-btn mt-1 text-[10px] text-primary hover:underline font-semibold"
+                                        data-pertanyaan-id="{{ $ptq->pertanyaan_id }}"
+                                        data-framework-id="{{ $framework->framework_id }}">
+                                        Simpan Komentar
+                                    </button>
                                 </div>
 
                                 {{-- Aksi --}}
@@ -184,9 +211,7 @@
                         @endforelse
                     </div>
                 </div>
-
             @empty
-                {{-- Domain ada tapi belum ada kategori --}}
                 <div class="px-4 py-5 text-center text-xs text-gray-400 border-b">
                     Belum ada kategori dalam domain ini.
                     <a href="{{ route('admin.assessment.create', ['domain_id' => $domain->domain_id]) }}"
@@ -205,13 +230,82 @@
 
 @push('scripts')
 <script>
-    function toggleAccordion(id) {
-        const el = document.getElementById(id);
-        const chevron = document.getElementById('chevron-' + id);
-        const isHidden = el.classList.contains('hidden');
-        el.classList.toggle('hidden', !isHidden);
-        chevron.style.transform = isHidden ? 'rotate(180deg)' : '';
+function toggleAccordion(id) {
+    const el = document.getElementById(id);
+    const chevron = document.getElementById('chevron-' + id);
+    const isHidden = el.classList.contains('hidden');
+    el.classList.toggle('hidden', !isHidden);
+    chevron.style.transform = isHidden ? 'rotate(180deg)' : '';
+}
+
+// Helper AJAX
+async function saveJawaban(formData, frameworkId) {
+    const res = await fetch(`/admin/assessment/${frameworkId}/jawaban`, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+        body: formData,
+    });
+    return res.json();
+}
+
+function showStatus(pertanyaanId, msg, success = true) {
+    const el = document.getElementById('file-status-' + pertanyaanId);
+    if (el) {
+        el.textContent = msg;
+        el.className = `text-[10px] italic ${success ? 'text-green-500' : 'text-red-500'}`;
+        setTimeout(() => el.textContent = '', 3000);
     }
+}
+
+// Upload file otomatis saat pilih
+document.querySelectorAll('.file-input').forEach(input => {
+    input.addEventListener('change', async function() {
+        const pertanyaanId = this.dataset.pertanyaanId;
+        const frameworkId = this.dataset.frameworkId;
+        const file = this.files[0];
+        if (!file) return;
+
+        showStatus(pertanyaanId, 'Mengupload...', true);
+
+        const formData = new FormData();
+        formData.append('pertanyaan_id', pertanyaanId);
+        formData.append('file_bukti', file);
+
+        const result = await saveJawaban(formData, frameworkId);
+        showStatus(pertanyaanId, result.success ? '✓ File tersimpan' : '✗ Gagal upload', result.success);
+    });
+});
+
+// Index dropdown — save on change
+document.querySelectorAll('.index-select').forEach(select => {
+    select.addEventListener('change', async function() {
+        const pertanyaanId = this.dataset.pertanyaanId;
+        const frameworkId = this.dataset.frameworkId;
+
+        const formData = new FormData();
+        formData.append('pertanyaan_id', pertanyaanId);
+        formData.append('indeks_nilai', this.value);
+
+        const result = await saveJawaban(formData, frameworkId);
+        showStatus(pertanyaanId, result.success ? '✓ Index tersimpan' : '✗ Gagal', result.success);
+    });
+});
+
+// Simpan Komentar button
+document.querySelectorAll('.save-comment-btn').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const pertanyaanId = this.dataset.pertanyaanId;
+        const frameworkId = this.dataset.frameworkId;
+        const textarea = document.querySelector(`.comment-input[data-pertanyaan-id="${pertanyaanId}"]`);
+
+        const formData = new FormData();
+        formData.append('pertanyaan_id', pertanyaanId);
+        formData.append('komentar_approver', textarea.value);
+
+        const result = await saveJawaban(formData, frameworkId);
+        showStatus(pertanyaanId, result.success ? '✓ Komentar tersimpan' : '✗ Gagal', result.success);
+    });
+});
 </script>
 @endpush
 @endsection
