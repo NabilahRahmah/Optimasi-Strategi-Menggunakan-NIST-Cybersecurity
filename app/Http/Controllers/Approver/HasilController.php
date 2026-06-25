@@ -13,7 +13,7 @@ class HasilController extends Controller
     public function index()
     {
         $assessments = Assessment::with('user')
-            ->where('status', 'approved')
+            ->where('status', 'disetujui')
             ->latest()
             ->get();
 
@@ -41,19 +41,19 @@ class HasilController extends Controller
             ->where('assessment_jawabans.assessment_id', $assessment->assessment_id)
             ->whereNotNull('assessment_jawabans.indeks_nilai')
             ->select(
-                'domains.kode',
+                'domains.kode_domain',
                 'domains.nama_domain',
                 'kategoris.kode_kategori',
                 'kategoris.nama_kategori',
                 DB::raw('ROUND(AVG(assessment_jawabans.indeks_nilai), 2) as rata_rata_kategori')
             )
-            ->groupBy('domains.domain_id', 'domains.kode', 'domains.nama_domain', 'kategoris.kategori_id', 'kategoris.kode_kategori', 'kategoris.nama_kategori')
+            ->groupBy('domains.domain_id', 'domains.kode_domain', 'domains.nama_domain', 'kategoris.kategori_id', 'kategoris.kode_kategori', 'kategoris.nama_kategori')
             ->orderBy('domains.domain_id')
             ->orderBy('kategoris.kode_kategori')
             ->get();
 
         $skorPerDomain = $hasils->mapWithKeys(fn($h) => [
-            $h->domain->kode => $h->nilai_kematangan
+            $h->domain->kode_domain => $h->nilai_kematangan
         ])->toArray();
 
         return view('approver.hasil.show', compact(

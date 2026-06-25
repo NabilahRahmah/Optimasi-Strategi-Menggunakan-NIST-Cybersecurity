@@ -3,7 +3,7 @@
 <div class="space-y-6">
     <div>
         <h1 class="text-2xl font-bold text-on-surface">Hasil Assessment</h1>
-        <p class="text-sm text-gray-500 mt-1">Daftar assessment yang sudah diverifikasi dan approved.</p>
+        <p class="text-sm text-gray-500 mt-1">Daftar assessment yang sudah diverifikasi dan disetujui.</p>
     </div>
 
     <div class="rounded-xl border bg-white shadow-sm overflow-hidden">
@@ -51,7 +51,7 @@
                 @empty
                     <tr>
                         <td colspan="5" class="px-6 py-12 text-center text-sm text-gray-500">
-                            Belum ada assessment yang approved.
+                            Belum ada assessment yang disetujui.
                         </td>
                     </tr>
                 @endforelse

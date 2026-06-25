@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Log;
 class SkorService
 {
     private const SKALA_MAX = 5;
-    private const TARGET_NILAI = 5.0;
+    private const TARGET_NILAI = 5.0; // target skor maksimal (skala 1-5), bukan label tier
 
     private const LEVEL = [
         ['min' => 0.0, 'max' => 0.9, 'label' => 'Tier 0 – Tidak Ada', 'warna' => '#718096'],
@@ -23,95 +23,153 @@ class SkorService
         ['min' => 5.0, 'max' => 5.0, 'label' => 'Tier 5 – Optimal', 'warna' => '#2B6CB0'],
     ];
 
+    /**
+     * Hitung skor kematangan per domain untuk sebuah assessment, lalu
+     * simpan satu baris `hasils` per domain (sesuai struktur tabel).
+     */
     public function calculate(int $assessmentId): array
     {
         $assessment = Assessment::with([
-            'jawabans.pertanyaan.kategori.domain', 
+            'jawabans.pertanyaan.kategori.domain',
         ])->findOrFail($assessmentId);
 
-        if (!in_array($assessment->status, ['submitted', 'in_review', 'approved'])) {
+        if (!in_array($assessment->status, ['submitted', 'in_review', 'disetujui'])) {
             throw new \InvalidArgumentException(
                 "Assessment ID {$assessmentId} tidak bisa dihitung. Status: {$assessment->status}"
             );
         }
 
+        // Domain yang relevan = domain milik framework assessment ini
+        $domains = Domain::where('framework_id', $assessment->framework_id)->get();
+
         $grouped = $this->groupByDomain($assessment->jawabans);
-        $skorPerDomain = $this->hitungSkor($grouped);
-        $nilaiTotal = collect($skorPerDomain)->avg('score');
+        $skorPerDomain = $this->hitungSkor($domains, $grouped);
+
+        $hasilRows = DB::transaction(function () use ($assessmentId, $skorPerDomain) {
+            $rows = [];
+
+            foreach ($skorPerDomain as $domainId => $item) {
+                $rows[$domainId] = Hasil::updateOrCreate(
+                    [
+                        'assessment_id' => $assessmentId,
+                        'domain_id'     => $domainId,
+                    ],
+                    [
+                        'nilai_kematangan' => $item['score'],
+                        'target_nilai'     => $item['target'],
+                        'gap'              => $item['gap'],
+                        'level_kematangan' => $this->cariLevel($item['score'])['label'],
+                    ]
+                );
+            }
+
+            return $rows;
+        });
+
+        $nilaiTotal = collect($skorPerDomain)->avg('score') ?? 0;
         $persentase = ($nilaiTotal / self::SKALA_MAX) * 100;
         $level = $this->cariLevel($nilaiTotal);
 
-        $hasil = \DB::transaction(function () use ($assessmentId, $skorPerDomain, $nilaiTotal, $persentase, $level) {
-            return Hasil::updateOrCreate(
-                ['assessment_id' => $assessmentId],
-                [
-                    'skor_per_domain' => $skorPerDomain,
-                    'nilai_total' => round($nilaiTotal, 2),
-                    'persentase_total' => round($persentase, 2),
-                    'level_kematangan' => $level['label'],
-                    'tgl_hasil' => now(),
-                ]
-            );
-        });
+        return [
+            'hasil'           => $hasilRows,
+            'skor_per_domain' => $skorPerDomain,
+            'nilai_total'     => round($nilaiTotal, 2),
+            'persentase'      => round($persentase, 2),
+            'level'           => $level,
+            'radar'           => $this->radarData($skorPerDomain),
+            'gap'             => $this->gapAnalysis($skorPerDomain),
+            'rekomendasi'     => $this->rekomendasiOtomatis($assessment->jawabans),
+        ];
+    }
+
+    /**
+     * Ambil ulang ringkasan hasil (dari baris-baris hasils yang sudah tersimpan)
+     * untuk sebuah assessment yang sudah pernah dihitung.
+     */
+    public function getRingkasan(int $assessmentId): array
+    {
+        $hasils = Hasil::with('domain')
+            ->where('assessment_id', $assessmentId)
+            ->get();
+
+        $skorPerDomain = [];
+        foreach ($hasils as $h) {
+            $kode = $h->domain?->kode_domain ?? 'UNKNOWN';
+            $skorPerDomain[$h->domain_id] = [
+                'domain_id' => $h->domain_id,
+                'kode'      => $kode,
+                'nama'      => $h->domain?->nama_domain,
+                'score'     => (float) $h->nilai_kematangan,
+                'target'    => (float) $h->target_nilai,
+                'gap'       => (float) $h->gap,
+            ];
+        }
+
+        $nilaiTotal = collect($skorPerDomain)->avg('score') ?? 0;
 
         return [
-            'hasil' => $hasil,
             'skor_per_domain' => $skorPerDomain,
-            'nilai_total' => round($nilaiTotal, 2),
-            'persentase' => round($persentase, 2),
-            'level' => $level,
-            'radar' => $this->radarData($skorPerDomain),
-            'gap' => $this->gapAnalysis($skorPerDomain),
-            'rekomendasi' => $this->rekomendasiOtomatis($assessment->jawabans),
+            'nilai_total'     => round($nilaiTotal, 2),
+            'persentase'      => round(($nilaiTotal / self::SKALA_MAX) * 100, 2),
+            'level'           => $this->cariLevel($nilaiTotal),
+            'radar'           => $this->radarData($skorPerDomain),
+            'gap'             => $this->gapAnalysis($skorPerDomain),
         ];
     }
 
     public function getGap(int $assessmentId): array
     {
-        $hasil = Hasil::where('assessment_id', $assessmentId)->firstOrFail();
-        return $this->gapAnalysis($hasil->skor_per_domain);
+        return $this->getRingkasan($assessmentId)['gap'];
     }
 
     public function getRadar(int $assessmentId): array
     {
-        $hasil = Hasil::where('assessment_id', $assessmentId)->firstOrFail();
-        return $this->radarData($hasil->skor_per_domain);
+        return $this->getRingkasan($assessmentId)['radar'];
     }
 
     // ── Private helpers ──────────────────────────────────────────
 
+    /**
+     * Kelompokkan jawaban berdasarkan domain_id (bukan kode_domain),
+     * supaya konsisten dipakai sebagai array key di hitungSkor().
+     */
     private function groupByDomain(Collection $jawabans): Collection
     {
         return $jawabans->groupBy(
-            fn($j) => $j->pertanyaan?->kategori?->domain?->kode ?? 'UNKNOWN'
-        );
+            fn($j) => $j->pertanyaan?->kategori?->domain?->domain_id
+        )->filter(fn($items, $key) => $key !== null);
     }
 
-    private function hitungSkor(Collection $grouped): array
+    /**
+     * @param  \Illuminate\Support\Collection<int, Domain>  $domains
+     * @param  Collection  $grouped  jawaban dikelompokkan per domain_id
+     * @return array<int, array>  key = domain_id
+     */
+    private function hitungSkor(Collection $domains, Collection $grouped): array
     {
-        $domains = Domain::with('framework')->get()->keyBy('kode');
         $result = [];
 
-        foreach ($domains as $kode => $domain) {
-            $jawabans = $grouped->get($kode, collect());
+        foreach ($domains as $domain) {
+            $jawabans = $grouped->get($domain->domain_id, collect());
             $disetujui = $jawabans->filter(fn($j) => $j->status_verifikasi === 'disetujui');
             $score = $disetujui->count() === 0
                 ? 0.0
                 : $disetujui->avg('indeks_nilai');
 
-            $targetDomain = $domain->target_nilai ?? self::TARGET_NILAI;
+            $targetDomain = self::TARGET_NILAI;
 
-            $result[$kode] = [
-                'kode' => $kode,
-                'nama' => $domain->nama_domain,
-                'score' => round($score, 2),
+            $result[$domain->domain_id] = [
+                'domain_id'  => $domain->domain_id,
+                'kode'       => $domain->kode_domain,
+                'nama'       => $domain->nama_domain,
+                'score'      => round($score, 2),
                 'percentage' => round(($score / self::SKALA_MAX) * 100, 1),
-                'gap' => round($targetDomain - $score, 2),
-                'target' => $targetDomain,
-                'total' => $jawabans->count(),
-                'disetujui' => $disetujui->count(),
-                'ditolak' => $jawabans->where('status_verifikasi', 'ditolak')->count(),
-                'pending' => $jawabans->where('status_verifikasi', 'pending')->count(),
+                'gap'        => round($targetDomain - $score, 2),
+                'target'     => $targetDomain,
+                'total'      => $jawabans->count(),
+                'disetujui'  => $disetujui->count(),
+                'ditolak'    => $jawabans->where('status_verifikasi', 'ditolak')->count(),
+                'pending'    => $jawabans->where('status_verifikasi', 'pending')->count(),
             ];
         }
 
@@ -134,9 +192,9 @@ class SkorService
             ->sortByDesc('gap')
             ->map(fn($item) => [
                 ...$item,
-                'prioritas' => $this->prioritas($item['gap']),
-                'level_label' => $this->cariLevel($item['score'])['label'],
-                'level_warna' => $this->cariLevel($item['score'])['warna'],
+                'prioritas'    => $this->prioritas($item['gap']),
+                'level_label'  => $this->cariLevel($item['score'])['label'],
+                'level_warna'  => $this->cariLevel($item['score'])['warna'],
             ])
             ->values()
             ->toArray();
@@ -155,15 +213,18 @@ class SkorService
     private function radarData(array $skorPerDomain): array
     {
         $order = ['GV', 'ID', 'PR', 'DE', 'RS', 'RC'];
+        $byKode = collect($skorPerDomain)->keyBy('kode');
+
         $labels = [];
         $scores = [];
         $targets = [];
 
         foreach ($order as $kode) {
-            if (isset($skorPerDomain[$kode])) {
-                $labels[] = $skorPerDomain[$kode]['nama'];
-                $scores[] = $skorPerDomain[$kode]['score'];
-                $targets[] = $skorPerDomain[$kode]['target'];
+            if ($byKode->has($kode)) {
+                $item = $byKode->get($kode);
+                $labels[] = $item['nama'];
+                $scores[] = $item['score'];
+                $targets[] = $item['target'];
             }
         }
 
@@ -180,7 +241,6 @@ class SkorService
             if ($j->status_verifikasi === 'ditolak')
                 continue;
 
-            // ✅ FIX: akses kategori lewat pertanyaan, bukan langsung
             $pertanyaan = $j->pertanyaan;
             if (!$pertanyaan)
                 continue;
@@ -199,14 +259,14 @@ class SkorService
                 continue;
 
             $result[] = [
-                'kode_kategori' => $kategori->kode_kategori,
-                'nama_kategori' => $kategori->nama_kategori,
-                'domain_kode' => $domain->kode,
-                'domain_nama' => $domain->nama_domain,
-                'indeks_saat' => $j->indeks_nilai,
-                'indeks_target' => $target,
-                'rekomendasi' => $teks,
-                'prioritas' => $this->prioritas(self::TARGET_NILAI - $j->indeks_nilai),
+                'kode_kategori'  => $kategori->kode_kategori,
+                'nama_kategori'  => $kategori->nama_kategori,
+                'domain_kode'    => $domain->kode_domain,
+                'domain_nama'    => $domain->nama_domain,
+                'indeks_saat'    => $j->indeks_nilai,
+                'indeks_target'  => $target,
+                'rekomendasi'    => $teks,
+                'prioritas'      => $this->prioritas(self::TARGET_NILAI - $j->indeks_nilai),
             ];
         }
 

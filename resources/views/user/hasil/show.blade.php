@@ -38,11 +38,15 @@
                 <h1 class="text-2xl font-black text-on-surface">{{ $assessment->judul_assessment }}</h1>
                 <p class="text-sm text-gray-500 mt-1">Disubmit pada: {{ $assessment->updated_at->format('d M Y') }}</p>
             </div>
-            <a href="{{ route('user.hasil.cetakPDF', $assessment->assessment_id) }}"
-                class="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white hover:bg-red-800 transition-colors shadow-md">
-                <span class="material-symbols-outlined text-lg">picture_as_pdf</span>
-                Cetak Laporan PDF
-            </a>
+            <form id="formCetakPDF" action="{{ route('user.hasil.cetakPDF', $assessment->assessment_id) }}" method="POST">
+                @csrf
+                <input type="hidden" name="radar_image" id="radarImageInput">
+                <button type="button" onclick="submitCetakPDF()"
+                    class="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white hover:bg-red-800 transition-colors shadow-md">
+                    <span class="material-symbols-outlined text-lg">picture_as_pdf</span>
+                    Cetak Laporan PDF
+                </button>
+            </form>
         </div>
 
         {{-- NILAI TOTAL --}}
@@ -76,7 +80,7 @@
                         @php
                             $pct = ($hasil->nilai_kematangan / 5) * 100;
                             $lv = $levelColor($hasil->nilai_kematangan);
-                            $kode = $hasil->domain->kode ?? '??';
+                            $kode = $hasil->domain->kode_domain ?? '??';
                             $dc = $domainColor[$kode] ?? 'bg-gray-100 text-gray-700';
                         @endphp
                         <div>
@@ -137,12 +141,12 @@
                             @foreach($rataRataPerKategori as $data)
                                 @php
                                     $lv = $levelColor($data->rata_rata_kategori);
-                                    $dc = $domainColor[$data->kode] ?? 'bg-gray-100 text-gray-700';
+                                    $dc = $domainColor[$data->kode_domain] ?? 'bg-gray-100 text-gray-700';
                                 @endphp
                                 <tr class="hover:bg-gray-50 transition-colors">
                                     <td class="px-6 py-3">
                                         <span class="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold {{ $dc }}">
-                                            {{ $data->kode }} — {{ $data->nama_domain }}
+                                            {{ $data->kode_domain }} — {{ $data->nama_domain }}
                                         </span>
                                     </td>
                                     <td class="px-4 py-3 text-xs font-mono text-gray-600">
@@ -178,7 +182,7 @@
             <div class="p-6 grid grid-cols-2 md:grid-cols-3 gap-4">
                 @foreach($hasils->sortByDesc('gap') as $hasil)
                     @php
-                        $kode = $hasil->domain->kode ?? '??';
+                        $kode = $hasil->domain->kode_domain ?? '??';
                         $dc = $domainColor[$kode] ?? 'bg-gray-100 text-gray-700';
                         $gapPriority = $hasil->gap >= 1.5 ? ['bg-red-50 border-red-200', 'text-red-700', 'Tinggi']
                             : ($hasil->gap >= 0.5 ? ['bg-yellow-50 border-yellow-200', 'text-yellow-700', 'Sedang']
@@ -193,18 +197,19 @@
                         <p class="text-xs text-gray-600 mb-1">{{ $hasil->domain->nama_domain }}</p>
                         <p class="text-2xl font-black {{ $gapPriority[1] }}">{{ number_format($hasil->gap, 2) }}</p>
                         <p class="text-[10px] text-gray-500 mt-1">{{ number_format($hasil->nilai_kematangan, 2) }} →
-                            {{ number_format($hasil->target_nilai, 2) }}</p>
+                            {{ number_format($hasil->target_nilai, 2) }}
+                        </p>
                     </div>
                 @endforeach
             </div>
         </div>
 
-        {{-- REKOMENDASI OTOMATIS --}}
+        {{-- REKOMENDASI --}}
         @if($rekomendasis->count() > 0)
             <div class="rounded-xl border bg-white shadow-sm overflow-hidden">
                 <div class="px-6 py-4 border-b flex items-center justify-between">
                     <div>
-                        <h3 class="font-bold text-on-surface">Rekomendasi Perbaikan Otomatis</h3>
+                        <h3 class="font-bold text-on-surface">Rekomendasi Perbaikan</h3>
                         <p class="text-xs text-gray-500 mt-1">Dihasilkan dari teks deskriptif indeks penilaian — urutkan dari
                             prioritas tertinggi</p>
                     </div>
@@ -220,7 +225,7 @@
                                 'Sedang' => 'bg-yellow-100 text-yellow-700',
                                 default => 'bg-green-100 text-green-700',
                             };
-                            $kodeRek = $rek->domain->kode ?? '??';
+                            $kodeRek = $rek->domain->kode_domain ?? '??';
                             $dcRek = $domainColor[$kodeRek] ?? 'bg-gray-100 text-gray-700';
                         @endphp
                         <div class="flex gap-4 px-6 py-4 hover:bg-gray-50 transition-colors">
@@ -298,5 +303,13 @@
                 }
             }
         });
+
+        function submitCetakPDF() {
+            const canvas = document.getElementById('radarChart');
+            if (canvas) {
+                document.getElementById('radarImageInput').value = canvas.toDataURL('image/png');
+            }
+            document.getElementById('formCetakPDF').submit();
+        }
     </script>
 @endsection

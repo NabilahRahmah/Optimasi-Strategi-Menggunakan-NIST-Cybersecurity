@@ -8,10 +8,15 @@ class AssessmentJawaban extends Model
 {
     protected $table = 'assessment_jawabans';
     protected $primaryKey = 'jawaban_id';
+    
+    public function getRouteKeyName(): string
+    {
+        return 'jawaban_id';
+    }
 
     protected $fillable = [
         'assessment_id',
-        'pertanyaan_id',   // ← ganti dari kategori_id
+        'pertanyaan_id',   
         'indeks_nilai',
         'file_bukti',
         'nama_file_asli',
@@ -22,7 +27,9 @@ class AssessmentJawaban extends Model
 
     protected $casts = [
         'indeks_nilai' => 'integer',
-        'ukuran_file' => 'integer',
+        'ukuran_file' => 'array',
+        'file_bukti' => 'array',
+        'nama_file_asli' => 'array',
     ];
 
     public function assessment(): BelongsTo

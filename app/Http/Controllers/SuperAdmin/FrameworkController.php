@@ -24,6 +24,7 @@ class FrameworkController extends Controller
     public function create()
     {
         $users = User::select('user_id', 'name', 'email')
+            ->where('role', 'admin')
             ->orderBy('name')
             ->get();
 
@@ -108,7 +109,10 @@ class FrameworkController extends Controller
     public function edit($id)
     {
         $framework = Framework::with('domains')->findOrFail($id);
-        $users = User::select('user_id', 'name', 'email')->orderBy('name')->get();
+        $users = User::select('user_id', 'name', 'email')
+        ->where('role', 'admin')
+        ->orderBy('name')
+        ->get();
 
         return view('superadmin.frameworks.edit', compact('framework', 'users'));
     }

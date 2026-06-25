@@ -14,13 +14,13 @@ class DashboardController extends Controller
 
         // Assessment yang ada jawaban ditolak (perlu revisi)
         $revisi_terbuka = Assessment::where('user_id', $userId)
-            ->whereIn('status', ['in_review', 'approved'])
+            ->whereIn('status', ['in_review', 'disetujui'])
             ->whereHas('jawabans', fn($q) => $q->where('status_verifikasi', 'ditolak'))
             ->count();
 
-        // Skor rata-rata dari hasil yang sudah approved
+        // Skor rata-rata dari hasil yang sudah disetujui
         $skor_rata = Hasil::whereHas('assessment', fn($q) =>
-            $q->where('user_id', $userId)->where('status', 'approved')
+            $q->where('user_id', $userId)->where('status', 'disetujui')
         )->avg('nilai_kematangan') ?? 0;
 
         return view('user.dashboard', [

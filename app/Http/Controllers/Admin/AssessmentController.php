@@ -22,17 +22,21 @@ class AssessmentController extends Controller
 
     public function index()
     {
-        $domains = Domain::with([
-            'kategoris' => function ($q) {
-                $q->with(['pertanyaans' => fn($q2) => $q2->orderBy('kode_pertanyaan')])
-                    ->orderBy('kode_kategori');
-            }
-        ])->orderBy('kode_domain')->get();
-
-        // Load semua framework + user yang sudah di-assign
         $frameworks = Framework::with(['assignedUsers', 'domains'])
-            ->where('is_active', true)
+            ->where('pic_user_id', auth()->user()->user_id) 
+            ->where('is_active', true)     
             ->get();
+
+        // 2. Ambil array ID framework-nya (perhatikan pakai framework_id bukan id)    
+        $frameworkIds = $frameworks->pluck('framework_id'); 
+
+        $domains = Domain::whereIn('framework_id', $frameworkIds)
+            ->with([
+                'kategoris' => function ($q) {
+                    $q->with(['pertanyaans' => fn($q2) => $q2->orderBy('kode_pertanyaan')])
+                        ->orderBy('kode_kategori');
+                }
+            ])->orderBy('kode_domain')->get();
 
         // User & Approver yang bisa di-assign
         $assignableUsers = User::whereIn('role', ['user', 'approver'])
@@ -76,8 +80,8 @@ class AssessmentController extends Controller
             'deskripsi' => $request->deskripsi,
         ]);
 
-         return redirect()->route('admin.assessment.edit', $domain->framework_id)   
-        ->with('success', 'Kategori berhasil ditambahkan!');
+        return redirect()->route('admin.assessment.edit', $domain->framework_id)
+            ->with('success', 'Kategori berhasil ditambahkan!');
     }
 
     public function edit($id)
@@ -224,16 +228,21 @@ class AssessmentController extends Controller
             'pertanyaan_id' => 'required|exists:pertanyaans,pertanyaan_id',
             'indeks_nilai' => 'nullable|integer|min:0|max:5',
             'komentar_approver' => 'nullable|string|max:1000',
-            'file_bukti' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'file_bukti.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'file_bukti' => 'nullable',
         ]);
 
         $assessment = Assessment::where('user_id', auth()->user()->user_id)
             ->where('framework_id', $framework_id)
             ->firstOrFail();
 
+        $jawaban = AssessmentJawaban::firstOrCreate([
+            'assessment_id' => $assessment->assessment_id,
+            'pertanyaan_id' => $request->pertanyaan_id,
+        ]);
+
         $data = [];
 
-        // Hanya update field yang memang dikirim di request
         if ($request->has('indeks_nilai')) {
             $data['indeks_nilai'] = $request->indeks_nilai;
         }
@@ -242,33 +251,31 @@ class AssessmentController extends Controller
             $data['komentar_approver'] = $request->komentar_approver;
         }
 
-        if ($request->hasFile('file_bukti') && $request->file('file_bukti')->isValid()) {
-            $file = $request->file('file_bukti');
+        // Multi-file: append ke array yang sudah ada
+        if ($request->hasFile('file_bukti')) {
+            $uploadedFiles = $request->file('file_bukti');
+            $uploadedFiles = is_array($uploadedFiles) ? $uploadedFiles : [$uploadedFiles];
 
-            // Hapus file lama kalau ada (replace saat upload ulang)
-            $existing = AssessmentJawaban::where('assessment_id', $assessment->assessment_id)
-                ->where('pertanyaan_id', $request->pertanyaan_id)
-                ->first();
-            if ($existing?->file_bukti) {
-                Storage::disk('local')->delete($existing->file_bukti);
+            $pathList = $jawaban->file_bukti ?? [];
+            $namaList = $jawaban->nama_file_asli ?? [];
+            $ukuranList = $jawaban->ukuran_file ?? [];
+
+            foreach ($uploadedFiles as $file) {
+                if ($file && $file->isValid()) {
+                    $pathList[] = $file->store('bukti_audit', 'public');
+                    $namaList[] = $file->getClientOriginalName();
+                    $ukuranList[] = $file->getSize();
+                }
             }
 
-            $data['file_bukti'] = $file->store('bukti_audit', 'local');
-            $data['nama_file_asli'] = $file->getClientOriginalName();
-            $data['ukuran_file'] = $file->getSize();
+            $data['file_bukti'] = $pathList;
+            $data['nama_file_asli'] = $namaList;
+            $data['ukuran_file'] = $ukuranList;
         }
 
-        // Kalau gak ada data yang perlu diupdate, return early
         if (empty($data)) {
             return response()->json(['success' => true, 'message' => 'Tidak ada perubahan']);
         }
-
-        $jawaban = AssessmentJawaban::firstOrCreate(
-            [
-                'assessment_id' => $assessment->assessment_id,
-                'pertanyaan_id' => $request->pertanyaan_id,
-            ]
-        );
 
         if (in_array($jawaban->status_verifikasi, [null, 'rejected'])) {
             $data['status_verifikasi'] = 'pending';
@@ -279,26 +286,37 @@ class AssessmentController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function previewFile($jawaban_id)
+    public function previewFile($jawaban_id, $index = 0)
     {
         $jawaban = AssessmentJawaban::findOrFail($jawaban_id);
-        $fullPath = storage_path('app/' . $jawaban->file_bukti);
 
-        if (!$jawaban->file_bukti || !file_exists($fullPath)) {
+        $paths = $jawaban->file_bukti ?? [];
+        $namas = $jawaban->nama_file_asli ?? [];
+
+        if (empty($paths) || !isset($paths[$index])) {
             abort(404, 'File tidak ditemukan.');
         }
 
-        $ext = strtolower(pathinfo($jawaban->nama_file_asli, PATHINFO_EXTENSION));
+        $fullPath = storage_path('app/' . $paths[$index]);
+
+        if (!file_exists($fullPath)) {
+            abort(404, 'File tidak ditemukan di storage.');
+        }
+
+        $namaFile = $namas[$index] ?? basename($paths[$index]);
+        $ext = strtolower(pathinfo($namaFile, PATHINFO_EXTENSION));
         $mimeMap = [
             'pdf' => 'application/pdf',
             'jpg' => 'image/jpeg',
             'jpeg' => 'image/jpeg',
             'png' => 'image/png',
+            'doc' => 'application/msword',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         ];
 
         return response()->file($fullPath, [
             'Content-Type' => $mimeMap[$ext] ?? 'application/octet-stream',
-            'Content-Disposition' => 'inline; filename="' . $jawaban->nama_file_asli . '"',
+            'Content-Disposition' => 'inline; filename="' . $namaFile . '"',
         ]);
     }
 

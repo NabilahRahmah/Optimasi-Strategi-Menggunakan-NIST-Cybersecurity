@@ -11,21 +11,21 @@ return new class extends Migration {
         // Update data lama dulu sebelum ubah enum
         DB::table('assessment_jawabans')
             ->where('status_verifikasi', 'disetujui')
-            ->update(['status_verifikasi' => 'approved']);
+            ->update(['status_verifikasi' => 'disetujui']);
 
         DB::table('assessment_jawabans')
             ->where('status_verifikasi', 'ditolak')
             ->update(['status_verifikasi' => 'rejected']);
 
         // Ubah enum
-        DB::statement("ALTER TABLE assessment_jawabans MODIFY COLUMN status_verifikasi ENUM('pending', 'approved', 'rejected') NULL DEFAULT NULL");
+        DB::statement("ALTER TABLE assessment_jawabans MODIFY COLUMN status_verifikasi ENUM('pending', 'disetujui', 'rejected') NULL DEFAULT NULL");
     }
 
     public function down(): void
     {
         // Rollback ke nilai lama
         DB::table('assessment_jawabans')
-            ->where('status_verifikasi', 'approved')
+            ->where('status_verifikasi', 'disetujui')
             ->update(['status_verifikasi' => 'disetujui']);
 
         DB::table('assessment_jawabans')

@@ -28,7 +28,7 @@
                 'section' => 'Verifikasi',
                 'items'   => [
                     ['label' => 'Dashboard',        'route' => 'approver.dashboard',          'mark' => 'DB', 'badge' => null],
-                    ['label' => 'Queue Verifikasi', 'route' => 'approver.verifikasi.index',   'mark' => 'VF', 'badge' => null],
+                    ['label' => 'Verifikasi', 'route' => 'approver.verifikasi.index',   'mark' => 'VF', 'badge' => null],
                     ['label' => 'Rekomendasi',      'route' => 'approver.rekomendasi.index',  'mark' => 'RK', 'badge' => null],
                     ['label' => 'Hasil Assessment', 'route' => 'approver.hasil.index',        'mark' => 'HL', 'badge' => null],
                 ],
@@ -39,7 +39,7 @@
                 'section' => 'Self Assessment',
                 'items'   => [
                     ['label' => 'Dashboard',      'route' => 'user.dashboard',        'mark' => 'DB', 'badge' => null],
-                    ['label' => 'Self Assessment','route' => 'assessment.create',     'mark' => 'SA', 'badge' => null], 
+                    ['label' => 'Self Assessment','route' => 'user.assessment.pilihFramework',     'mark' => 'SA', 'badge' => null], 
                     ['label' => 'Hasil Saya',     'route' => 'user.hasil.index',      'mark' => 'HS', 'badge' => null],
                 ],
             ],

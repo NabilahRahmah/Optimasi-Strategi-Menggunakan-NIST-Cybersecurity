@@ -6,8 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Assessment;
 use App\Models\AssessmentJawaban;
 use App\Models\Domain;
-use App\Models\DokumenPendukung;
-use App\Models\Pertanyaan;
 use App\Services\SkorService;
 use Illuminate\Http\Request;
 
@@ -17,36 +15,52 @@ class AssessmentController extends Controller
     {
         $frameworks = auth()->user()->assignedFrameworks()
             ->where('is_active', true)
+            ->with(['domains.kategoris.pertanyaans'])
             ->get();
 
-        return view('assessment.pilih-framework', compact('frameworks'));
+        return view('user.assessment.pilih-framework', compact('frameworks'));
     }
 
-    public function create(Request $request)
+    public function index(Request $request)
     {
         $user = auth()->user();
-
         $frameworkId = $request->query('framework_id');
+        $assessmentId = $request->query('assessment_id');
 
-        // Validasi: framework yang diminta harus salah satu yang di-assign ke user ini
         if ($frameworkId && !$user->isAssignedTo($frameworkId)) {
             abort(403, 'Anda tidak memiliki akses ke framework ini.');
         }
 
-        // Kalau tidak ada framework_id di query string, coba ambil dari assessment draft yang sedang berjalan
         if (!$frameworkId) {
-            $draft = Assessment::where('user_id', $user->user_id)
-                ->where('status', 'draft')
+            return redirect()->route('user.assessment.pilihFramework')
+                ->with('error', 'Silakan pilih framework terlebih dahulu.');
+        }
+
+        // Kalau ada assessment_id spesifik → load itu langsung
+        if ($assessmentId) {
+            $assessment = Assessment::where('user_id', $user->user_id)
+                ->where('assessment_id', $assessmentId)
+                ->with('jawabans')
+                ->firstOrFail();
+        } else {
+            // Cari yang sedang berjalan
+            $assessment = Assessment::where('user_id', $user->user_id)
+                ->where('framework_id', $frameworkId)
+                ->whereIn('status', ['draft', 'submitted', 'in_review', 'ditolak'])
+                ->with('jawabans')
                 ->latest()
                 ->first();
 
-            $frameworkId = $draft?->framework_id;
-        }
-
-        // Masih kosong juga? Berarti user belum pilih framework — lempar ke halaman pilih
-        if (!$frameworkId) {
-            return redirect()->route('assessment.pilihFramework')
-                ->with('error', 'Silakan pilih framework terlebih dahulu.');
+            // Kalau tidak ada → buat baru
+            if (!$assessment) {
+                $assessment = Assessment::create([
+                    'user_id' => $user->user_id,
+                    'framework_id' => $frameworkId,
+                    'judul_assessment' => 'Self Assessment Q' . now()->quarter . ' ' . now()->year,
+                    'tgl_pelaksanaan' => now()->toDateString(),
+                    'status' => 'draft',
+                ]);
+            }
         }
 
         $domains = Domain::where('framework_id', $frameworkId)
@@ -58,26 +72,9 @@ class AssessmentController extends Controller
             ->orderBy('kode_domain')
             ->get();
 
-        $assessment = Assessment::where('user_id', $user->user_id)
-            ->where('framework_id', $frameworkId)
-            ->where('status', 'draft')
-            ->with('jawabans')
-            ->latest()
-            ->first();
-
-        if (!$assessment) {
-            $assessment = Assessment::create([
-                'user_id' => $user->user_id,
-                'framework_id' => $frameworkId,
-                'judul_assessment' => 'Self Assessment Q' . now()->quarter . ' ' . now()->year,
-                'tgl_pelaksanaan' => now()->toDateString(),
-                'status' => 'draft',
-            ]);
-        }
-
         $existingJawaban = $assessment->jawabans->keyBy('pertanyaan_id');
 
-        return view('assessment.create', compact('domains', 'assessment', 'existingJawaban'));
+        return view('user.assessment.index', compact('domains', 'assessment', 'existingJawaban'));
     }
 
     public function store(Request $request)
@@ -87,16 +84,18 @@ class AssessmentController extends Controller
             'judul_assessment' => 'required|string|max:255',
             'scores' => 'nullable|array',
             'scores.*' => 'nullable|integer|min:0|max:5',
-            'files.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'files.*.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
         ]);
 
+        // UBAH INI: Izinkan akses jika statusnya draft ATAU revisi
         $assessment = Assessment::where('user_id', auth()->user()->user_id)
             ->where('assessment_id', $request->assessment_id)
-            ->where('status', 'draft')
+            ->whereIn('status', ['draft', 'ditolak', 'revisi'])
             ->firstOrFail();
 
         $isDraft = $request->action === 'draft';
 
+        // Update status assessment
         $assessment->update([
             'judul_assessment' => $request->judul_assessment,
             'status' => $isDraft ? 'draft' : 'submitted',
@@ -104,69 +103,50 @@ class AssessmentController extends Controller
 
         if ($request->has('scores')) {
             foreach ($request->scores as $pertanyaan_id => $nilai) {
-                $pathBukti = null;
-                $namaFileAsli = null;
-                $ukuranFile = null;
+                $jawaban = AssessmentJawaban::firstOrNew([
+                    'assessment_id' => $assessment->assessment_id,
+                    'pertanyaan_id' => $pertanyaan_id,
+                ]);
+
+                if (in_array($jawaban->status_verifikasi, ['ditolak', 'disetujui'])) {
+                    $jawaban->status_verifikasi = 'pending';
+                    $jawaban->komentar_approver = null; 
+                }
+
+                // Jika statusnya revisi, kita "buka" kunci per item
+                // Reset status verifikasi ke pending agar bisa direview ulang
+                if ($jawaban->status_verifikasi === 'ditolak') {
+                    $jawaban->status_verifikasi = 'pending';
+                    $jawaban->komentar_approver = null;
+                }
+
+                // --- LOGIKA FILE (PENTING) ---
+                // Jika ingin menambah file baru ke bukti yang sudah ada:
+                $pathList = $jawaban->file_bukti ?? [];
+                $namaList = $jawaban->nama_file_asli ?? [];
+                $ukuranList = $jawaban->ukuran_file ?? [];
 
                 if ($request->hasFile("files.{$pertanyaan_id}")) {
-                    $file = $request->file("files.{$pertanyaan_id}");
-
-                    if ($file->isValid()) {
-                        $namaFileAsli = $file->getClientOriginalName();
-                        $ukuranFile = $file->getSize();
-                        $pathBukti = $file->store('bukti_audit', 'local');
-
-                        $existing = AssessmentJawaban::where('assessment_id', $assessment->assessment_id)
-                            ->where('pertanyaan_id', $pertanyaan_id)
-                            ->first();
-
-                        if ($existing?->file_bukti) {
-                            \Storage::disk('local')->delete($existing->file_bukti);
+                    $uploadedFiles = (array) $request->file("files.{$pertanyaan_id}");
+                    foreach ($uploadedFiles as $file) {
+                        if ($file && $file->isValid()) {
+                            $pathList[] = $file->store('bukti_audit', 'public');
+                            $namaList[] = $file->getClientOriginalName();
+                            $ukuranList[] = $file->getSize();
                         }
                     }
                 }
 
-                $jawabanData = [
-                    'indeks_nilai' => $nilai ?: null,
-                    'status_verifikasi' => 'pending',
-                ];
+                $jawaban->indeks_nilai = $nilai ?: null;
+                $jawaban->file_bukti = $pathList;
+                $jawaban->nama_file_asli = $namaList;
+                $jawaban->ukuran_file = $ukuranList;
 
-                if ($pathBukti) {
-                    $jawabanData['file_bukti'] = $pathBukti;
-                    $jawabanData['nama_file_asli'] = $namaFileAsli;
-                }
-
-                $jawaban = AssessmentJawaban::updateOrCreate(
-                    [
-                        'assessment_id' => $assessment->assessment_id,
-                        'pertanyaan_id' => $pertanyaan_id, // fix: key yang benar
-                    ],
-                    $jawabanData
-                );
-
-                if ($pathBukti) {
-                    $pertanyaan = Pertanyaan::with('kategori.domain')->find($pertanyaan_id);
-                    $domainId = $pertanyaan?->kategori?->domain?->domain_id;
-
-                    DokumenPendukung::where('jawaban_id', $jawaban->jawaban_id)->delete();
-
-                    DokumenPendukung::create([
-                        'user_id' => auth()->user()->user_id,
-                        'jawaban_id' => $jawaban->jawaban_id,
-                        'domain_id' => $domainId,
-                        'nama_dokumen' => 'Bukti: ' . ($pertanyaan?->kode_pertanyaan ?? 'Pertanyaan'),
-                        'jenis_dokumen' => 'Bukti Assessment',
-                        'deskripsi' => $pertanyaan?->judul,
-                        'file_path' => $pathBukti,
-                        'nama_file_asli' => $namaFileAsli,
-                        'ukuran_file' => $ukuranFile,
-                        'status' => 'aktif',
-                        'sumber' => 'assessment',
-                    ]);
-                }
+                $jawaban->save();
             }
         }
 
+        // Eksekusi SkorService jika disubmit
         if (!$isDraft) {
             try {
                 $skorService = new SkorService();
@@ -175,14 +155,10 @@ class AssessmentController extends Controller
                 \Log::warning('SkorService gagal: ' . $e->getMessage());
             }
 
-            return redirect()
-                ->route('user.dashboard')
-                ->with('success', 'Assessment berhasil disubmit! Menunggu verifikasi Approver.');
+            return redirect()->route('user.dashboard')->with('success', 'Berhasil disubmit! Menunggu verifikasi ulang.');
         }
 
-        return redirect()
-            ->route('assessment.create')
-            ->with('success', 'Draft berhasil disimpan!');
+        return redirect()->back()->with('success', 'Draft berhasil disimpan!');
     }
 
     public function saveJawaban(Request $request, $assessment_id)
@@ -195,7 +171,13 @@ class AssessmentController extends Controller
             'pertanyaan_id' => 'required|exists:pertanyaans,pertanyaan_id',
             'indeks_nilai' => 'nullable|integer|min:0|max:5',
             'komentar_approver' => 'nullable|string|max:1000',
-            'file_bukti' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'file_bukti.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'file_bukti' => 'nullable',
+        ]);
+
+        $jawaban = AssessmentJawaban::firstOrCreate([
+            'assessment_id' => $assessment->assessment_id,
+            'pertanyaan_id' => $request->pertanyaan_id,
         ]);
 
         $data = [];
@@ -208,29 +190,30 @@ class AssessmentController extends Controller
             $data['komentar_approver'] = $request->komentar_approver;
         }
 
-        if ($request->hasFile('file_bukti') && $request->file('file_bukti')->isValid()) {
-            $file = $request->file('file_bukti');
+        if ($request->hasFile('file_bukti')) {
+            $uploadedFiles = $request->file('file_bukti');
+            $uploadedFiles = is_array($uploadedFiles) ? $uploadedFiles : [$uploadedFiles];
 
-            $existing = AssessmentJawaban::where('assessment_id', $assessment->assessment_id)
-                ->where('pertanyaan_id', $request->pertanyaan_id)
-                ->first();
-            if ($existing?->file_bukti) {
-                \Storage::disk('local')->delete($existing->file_bukti);
+            $pathList = $jawaban->file_bukti ?? [];
+            $namaList = $jawaban->nama_file_asli ?? [];
+            $ukuranList = $jawaban->ukuran_file ?? [];
+
+            foreach ($uploadedFiles as $file) {
+                if ($file && $file->isValid()) {
+                    $pathList[] = $file->store('bukti_audit', 'public');
+                    $namaList[] = $file->getClientOriginalName();
+                    $ukuranList[] = $file->getSize();
+                }
             }
 
-            $data['file_bukti'] = $file->store('bukti_audit', 'local');
-            $data['nama_file_asli'] = $file->getClientOriginalName();
-            $data['ukuran_file'] = $file->getSize();
+            $data['file_bukti'] = $pathList;
+            $data['nama_file_asli'] = $namaList;
+            $data['ukuran_file'] = $ukuranList;
         }
 
         if (empty($data)) {
             return response()->json(['success' => true, 'message' => 'Tidak ada perubahan']);
         }
-
-        $jawaban = AssessmentJawaban::firstOrCreate([
-            'assessment_id' => $assessment->assessment_id,
-            'pertanyaan_id' => $request->pertanyaan_id,
-        ]);
 
         if (in_array($jawaban->status_verifikasi, [null, 'rejected'])) {
             $data['status_verifikasi'] = 'pending';
@@ -241,103 +224,44 @@ class AssessmentController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function revisi(Assessment $assessment)
+    public function previewFile($jawaban_id, $index = 0)
     {
-        abort_if($assessment->user_id !== auth()->user()->user_id, 403);
+        $jawaban = AssessmentJawaban::with('assessment')->findOrFail($jawaban_id);
 
-        $assessment->load([
-            'jawabans' => fn($q) => $q->where('status_verifikasi', 'ditolak')
-                ->with('pertanyaan.kategori.domain'),
-        ]);
+        abort_if(
+            $jawaban->assessment->user_id !== auth()->user()->user_id,
+            403,
+            'Akses ditolak.'
+        );
 
-        $grouped = $assessment->jawabans
-            ->filter(fn($j) => $j->pertanyaan?->kategori?->domain)
-            ->groupBy(fn($j) => $j->pertanyaan->kategori->domain->nama_domain)
-            ->map(
-                fn($byDomain) =>
-                $byDomain->groupBy(fn($j) => $j->pertanyaan->kategori->nama_kategori)
-            );
+        $paths = $jawaban->file_bukti ?? [];
+        $namas = $jawaban->nama_file_asli ?? [];
 
-        return view('assessment.revisi', compact('assessment', 'grouped'));
-    }
-
-    public function simpanRevisi(Request $request, Assessment $assessment)
-    {
-        abort_if($assessment->user_id !== auth()->user()->user_id, 403);
-
-        $request->validate([
-            'scores' => 'nullable|array',
-            'scores.*' => 'nullable|integer|min:0|max:5',
-            'files.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-        ]);
-
-        if ($request->has('scores')) {
-            foreach ($request->scores as $pertanyaan_id => $nilai) {
-                $pathBukti = null;
-                $namaFileAsli = null;
-                $ukuranFile = null;
-
-                if ($request->hasFile("files.{$pertanyaan_id}")) {
-                    $file = $request->file("files.{$pertanyaan_id}");
-                    if ($file->isValid()) {
-                        $namaFileAsli = $file->getClientOriginalName();
-                        $ukuranFile = $file->getSize();
-                        $pathBukti = $file->store('bukti_audit', 'local');
-                    }
-                }
-
-                $jawabanData = [
-                    'indeks_nilai' => $nilai ?: null,
-                    'status_verifikasi' => 'pending',
-                    'komentar_approver' => null,
-                ];
-
-                if ($pathBukti) {
-                    $jawabanData['file_bukti'] = $pathBukti;
-                    $jawabanData['nama_file_asli'] = $namaFileAsli;
-                }
-
-                $jawaban = AssessmentJawaban::where('assessment_id', $assessment->assessment_id)
-                    ->where('pertanyaan_id', $pertanyaan_id)
-                    ->first();
-
-                if ($jawaban) {
-                    $jawaban->update($jawabanData);
-
-                    if ($pathBukti) {
-                        $pertanyaan = Pertanyaan::with('kategori.domain')->find($pertanyaan_id);
-                        $domainId = $pertanyaan?->kategori?->domain?->domain_id;
-
-                        DokumenPendukung::where('jawaban_id', $jawaban->jawaban_id)->delete();
-
-                        DokumenPendukung::create([
-                            'user_id' => auth()->user()->user_id,
-                            'jawaban_id' => $jawaban->jawaban_id,
-                            'domain_id' => $domainId,
-                            'nama_dokumen' => 'Bukti: ' . ($pertanyaan?->kode_pertanyaan ?? 'Pertanyaan'),
-                            'jenis_dokumen' => 'Bukti Assessment',
-                            'deskripsi' => $pertanyaan?->judul,
-                            'file_path' => $pathBukti,
-                            'nama_file_asli' => $namaFileAsli,
-                            'ukuran_file' => $ukuranFile,
-                            'status' => 'aktif',
-                            'sumber' => 'assessment',
-                        ]);
-                    }
-                }
-            }
+        if (empty($paths) || !isset($paths[$index])) {
+            abort(404, 'File tidak ditemukan.');
         }
 
-        $masihDitolak = $assessment->jawabans()
-            ->where('status_verifikasi', 'ditolak')
-            ->count();
+        $fullPath = storage_path('app/' . $paths[$index]);
 
-        if ($masihDitolak === 0) {
-            $assessment->update(['status' => 'submitted']);
+        if (!file_exists($fullPath)) {
+            abort(404, 'File tidak ditemukan di storage.');
         }
 
-        return redirect()
-            ->route('user.hasil.show', $assessment->assessment_id)
-            ->with('success', 'Revisi berhasil disimpan! Menunggu verifikasi ulang dari Approver.');
+        $namaFile = $namas[$index] ?? basename($paths[$index]);
+        $ext = strtolower(pathinfo($namaFile, PATHINFO_EXTENSION));
+        $mimeMap = [
+            'pdf' => 'application/pdf',
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'doc' => 'application/msword',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ];
+
+        return response()->file($fullPath, [
+            'Content-Type' => $mimeMap[$ext] ?? 'application/octet-stream',
+            'Content-Disposition' => 'inline; filename="' . $namaFile . '"',
+        ]);
     }
+
 }

@@ -28,18 +28,18 @@ class VerifikasiController extends Controller
         ]);
     }
 
-    // List yang sudah approved
-    public function approved()
+    // List yang sudah disetujui
+    public function disetujui()
     {
         $assessments = Assessment::with('user')
-            ->where('status', 'approved')
+            ->where('status', 'disetujui')
             ->latest()
             ->get();
 
         return view('approver.verifikasi.index', [
             'assessments' => $assessments,
             'pageTitle'   => 'Assessment Selesai Diverifikasi',
-            'activeTab'   => 'approved',
+            'activeTab'   => 'disetujui',
         ]);
     }
 
@@ -86,11 +86,11 @@ class VerifikasiController extends Controller
             ->whereIn('status_verifikasi', ['disetujui', 'ditolak'])
             ->count();
 
-        // Kalau semua jawaban sudah diverifikasi → hitung skor & set approved
+        // Kalau semua jawaban sudah diverifikasi → hitung skor & set disetujui
         if ($totalJawaban > 0 && $sudahVerif === $totalJawaban) {
             try {
                 $this->skor->calculate($assessment->assessment_id);
-                $assessment->update(['status' => 'approved']);
+                $assessment->update(['status' => 'disetujui']);
             } catch (\Exception $e) {
                 Log::error('[Verifikasi] Gagal hitung skor', [
                     'assessment_id' => $assessment->assessment_id,
@@ -107,7 +107,7 @@ class VerifikasiController extends Controller
     {
         try {
             $result = $this->skor->calculate($assessment->assessment_id);
-            $assessment->update(['status' => 'approved']);
+            $assessment->update(['status' => 'disetujui']);
 
             return response()->json([
                 'success'     => true,

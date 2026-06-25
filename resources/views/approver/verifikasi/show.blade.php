@@ -38,28 +38,34 @@
     <div class="rounded-xl border bg-card shadow-sm p-5">
         <div class="flex flex-wrap gap-6 mb-3">
             <div class="text-center">
-                <p class="text-2xl font-bold text-foreground">{{ $total }}</p>
+                {{-- Tambahan: data-total --}}
+                <p class="text-2xl font-bold text-foreground" data-total="{{ $total }}">{{ $total }}</p>
                 <p class="text-xs text-muted-foreground">Total Jawaban</p>
             </div>
             <div class="text-center">
-                <p class="text-2xl font-bold text-green-600">{{ $disetujui }}</p>
+                {{-- Tambahan: data-count-disetujui --}}
+                <p class="text-2xl font-bold text-green-600" data-count-disetujui>{{ $disetujui }}</p>
                 <p class="text-xs text-muted-foreground">Disetujui</p>
             </div>
             <div class="text-center">
-                <p class="text-2xl font-bold text-red-600">{{ $ditolak }}</p>
+                {{-- Tambahan: data-count-ditolak --}}
+                <p class="text-2xl font-bold text-red-600" data-count-ditolak>{{ $ditolak }}</p>
                 <p class="text-xs text-muted-foreground">Ditolak</p>
             </div>
             <div class="text-center">
-                <p class="text-2xl font-bold text-yellow-600">{{ $pending }}</p>
+                {{-- Tambahan: data-count-pending --}}
+                <p class="text-2xl font-bold text-yellow-600" data-count-pending>{{ $pending }}</p>
                 <p class="text-xs text-muted-foreground">Pending</p>
             </div>
             <div class="text-center">
-                <p class="text-2xl font-bold text-blue-600">{{ $pct }}%</p>
+                {{-- Tambahan: data-count-pct --}}
+                <p class="text-2xl font-bold text-blue-600" data-count-pct>{{ $pct }}%</p>
                 <p class="text-xs text-muted-foreground">Progress</p>
             </div>
         </div>
         <div class="w-full bg-gray-100 rounded-full h-2">
-            <div class="bg-primary h-2 rounded-full transition-all" style="width: {{ $pct }}%"></div>
+            {{-- Tambahan: data-progress-bar --}}
+            <div class="bg-primary h-2 rounded-full transition-all" data-progress-bar style="width: {{ $pct }}%"></div>
         </div>
     </div>
 
@@ -123,16 +129,25 @@
                                     @endif
                                 </td>
                                 <td class="px-6 py-3 text-center">
-                                    @if($jawaban->file_bukti)
-                                        <a href="{{ Storage::url($jawaban->file_bukti) }}" target="_blank"
-                                           class="text-xs text-blue-600 hover:underline font-medium">
-                                            📄 Lihat
+                                    @php
+                                        $files = $jawaban->file_bukti ?? [];
+                                        $namas = $jawaban->nama_file_asli ?? [];
+                                    @endphp
+                                @if(!empty($files))
+                                    <div class="flex flex-col gap-1 items-center">
+                                    @foreach($files as $i => $path)
+                                        <a href="{{ route('bukti.preview', ['jawaban_id' => $jawaban->jawaban_id, 'index' => $i]) }}"
+                                        target="_blank"
+                                        class="text-xs text-blue-600 hover:underline font-medium">
+                                        📎 {{ $namas[$i] ?? 'File ' . ($i + 1) }}
                                         </a>
-                                    @else
-                                        <span class="text-xs text-muted-foreground italic">Tidak ada</span>
-                                    @endif
+                                    @endforeach
+                                    </div>
+                                @else
+                                    <span class="text-xs text-muted-foreground italic">Tidak ada</span>
+                                @endif
                                 </td>
-                                <td class="px-6 py-3 text-center">
+                                <td class="px-6 py-3 text-center" id="status-{{ $jawaban->jawaban_id }}">
                                     @if($jawaban->status_verifikasi === 'disetujui')
                                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
                                             ✓ Disetujui
@@ -141,7 +156,7 @@
                                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
                                             ✗ Ditolak
                                         </span>
-                                    @else
+                                     @else
                                         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">
                                             ⏳ Pending
                                         </span>
@@ -150,25 +165,21 @@
                                 <td class="px-6 py-3">
                                     <div class="flex justify-center gap-2">
                                         {{-- Setujui --}}
-                                        <form action="{{ route('approver.verifikasi.item', $jawaban->jawaban_id) }}"
-                                              method="POST">
-                                            @csrf
-                                            <input type="hidden" name="status" value="disetujui">
-                                            <button type="submit"
-                                                    class="text-xs font-semibold text-green-700 border border-green-200 px-2.5 py-1 rounded-lg hover:bg-green-50 transition
-                                                    {{ $jawaban->status_verifikasi === 'disetujui' ? 'opacity-50 cursor-not-allowed' : '' }}"
-                                                    {{ $jawaban->status_verifikasi === 'disetujui' ? 'disabled' : '' }}>
-                                                ✓ Setuju
-                                            </button>
-                                        </form>
+                                        <button type="button"
+                                            onclick="verifikasiItem({{ $jawaban->jawaban_id }}, 'disetujui', this)"
+                                            class="text-xs font-semibold text-green-700 border border-green-200 px-2.5 py-1 rounded-lg hover:bg-green-50 transition
+                                            {{ $jawaban->status_verifikasi === 'disetujui' ? 'opacity-50 cursor-not-allowed' : '' }}"
+                                            {{ $jawaban->status_verifikasi === 'disetujui' ? 'disabled' : '' }}>
+                                            ✓ Setuju
+                                        </button>
 
                                         {{-- Tolak --}}
                                         <button type="button"
-                                                onclick="openTolakModal({{ $jawaban->jawaban_id }})"
-                                                class="text-xs font-semibold text-red-700 border border-red-200 px-2.5 py-1 rounded-lg hover:bg-red-50 transition
-                                                {{ $jawaban->status_verifikasi === 'ditolak' ? 'opacity-50 cursor-not-allowed' : '' }}"
-                                                {{ $jawaban->status_verifikasi === 'ditolak' ? 'disabled' : '' }}>
-                                            ✗ Tolak
+                                            onclick="openTolakModal({{ $jawaban->jawaban_id }}, this)"
+                                            class="text-xs font-semibold text-red-700 border border-red-200 px-2.5 py-1 rounded-lg hover:bg-red-50 transition
+                                            {{ $jawaban->status_verifikasi === 'ditolak' ? 'opacity-50 cursor-not-allowed' : '' }}"
+                                            {{ $jawaban->status_verifikasi === 'ditolak' ? 'disabled' : '' }}>
+                                                ✗ Tolak
                                         </button>
                                     </div>
                                 </td>
@@ -215,17 +226,97 @@
 </div>
 
 <script>
-function openTolakModal(jawabanId) {
+let activeTolakBtn = null;
+
+async function verifikasiItem(jawabanId, status, btn, komentar = '') {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+
+    btn.disabled = true;
+    btn.textContent = '...';
+
+    try {
+        const res = await fetch(`/approver/verifikasi/${jawabanId}/item`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({ status, komentar }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(data.message ?? 'Gagal menyimpan');
+        }
+
+        // Update badge status di baris yang sama
+        const statusCell = document.getElementById(`status-${jawabanId}`);
+        if (status === 'disetujui') {
+            statusCell.innerHTML = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">✓ Disetujui</span>`;
+            btn.textContent = '✓ Setuju';
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            btn.disabled = true;
+        } else {
+            statusCell.innerHTML = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">✗ Ditolak</span>`;
+            btn.textContent = '✗ Tolak';
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            btn.disabled = true;
+        }
+
+        // Update counter progress
+        updateProgress();
+
+        if (data.semua_selesai) {
+            alert('Semua jawaban sudah diverifikasi! Silakan finalisasi.');
+        }
+
+    } catch (e) {
+        btn.disabled = false;
+        btn.textContent = status === 'disetujui' ? '✓ Setuju' : '✗ Tolak';
+        alert('Gagal menyimpan. Coba lagi.');
+    }
+}
+
+function updateProgress() {
+    const total    = parseInt(document.querySelector('[data-total]')?.dataset.total ?? 0);
+    const setujui  = document.querySelectorAll('[id^="status-"] .bg-green-100').length;
+    const tolak    = document.querySelectorAll('[id^="status-"] .bg-red-100').length;
+    const pending  = total - setujui - tolak;
+    const pct      = total > 0 ? Math.round(((setujui + tolak) / total) * 100) : 0;
+
+    document.querySelector('[data-count-disetujui]').textContent = setujui;
+    document.querySelector('[data-count-ditolak]').textContent   = tolak;
+    document.querySelector('[data-count-pending]').textContent   = pending;
+    document.querySelector('[data-count-pct]').textContent       = pct + '%';
+    document.querySelector('[data-progress-bar]').style.width    = pct + '%';
+}
+
+function openTolakModal(jawabanId, btn) {
+    activeTolakBtn = btn;
     const modal = document.getElementById('tolakModal');
-    const form  = document.getElementById('tolakForm');
-    form.action = `/approver/verifikasi/${jawabanId}/item`;
+    modal.dataset.jawabanId = jawabanId;
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+    document.querySelector('#tolakForm textarea').value = '';
 }
+
 function closeTolakModal() {
     const modal = document.getElementById('tolakModal');
     modal.classList.add('hidden');
     modal.classList.remove('flex');
+    activeTolakBtn = null;
 }
+
+document.getElementById('tolakForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const modal     = document.getElementById('tolakModal');
+    const jawabanId = modal.dataset.jawabanId;
+    const komentar  = this.querySelector('textarea[name="komentar"]').value;
+
+    await verifikasiItem(jawabanId, 'ditolak', activeTolakBtn, komentar);
+    closeTolakModal();
+});
 </script>
 @endsection

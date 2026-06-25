@@ -13,7 +13,7 @@
             <h1 class="text-3xl font-black text-stone-900 tracking-tight">Status Hasil Verifikasi</h1>
         </div>
 
-        {{-- HERO CARD STATE APPROVED (Merah, Hitam, Putih) --}}
+        {{-- HERO CARD STATE disetujui (Merah, Hitam, Putih) --}}
         <div class="bg-stone-950 text-white rounded-2xl border border-stone-800 p-8 shadow-xl relative overflow-hidden">
             {{-- Dekorasi Background Gak Lebay --}}
             <div class="absolute top-0 right-0 w-64 h-64 bg-red-700/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -27,7 +27,7 @@
                     <div>
                         <div
                             class="inline-flex items-center gap-1.5 rounded-full bg-red-900/50 px-3 py-1 text-xs font-black text-red-400 border border-red-800 uppercase tracking-widest mb-2">
-                            Status: APPROVED
+                            Status: DISETUJUI
                         </div>
                         <h2 class="text-2xl font-black tracking-tight">
                             {{ $assessment->judul_assessment ?? 'Self Assessment Keamanan Informasi' }}</h2>

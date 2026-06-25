@@ -7,13 +7,22 @@
     $terisi = $existingJawaban->filter(fn($j) => $j->indeks_nilai > 0)->count();
     $progressPct = $totalPertanyaan > 0 ? round(($terisi / $totalPertanyaan) * 100) : 0;
     $belumDiisi = $totalPertanyaan - $terisi;
-@endphp
+
+    // --- LOGIKA FASE ASSESSMENT ---
+    $isReadOnly = $assessment->status === 'disetujui';
+    $isReviewPhase = in_array($assessment->status, ['submitted', 'in_review']);
+    $isRevisiPhase = $assessment->status === 'revisi';
+    
+    // Footer aksi (tombol submit) hanya muncul saat Draft atau Revisi
+    $showFooterAksi = !$isReadOnly && !$isReviewPhase; 
+@endphp 
 
 <form id="assessmentForm"
-      action="{{ route('assessment.store') }}"
+      action="{{ route('user.assessment.store') }}"
       method="POST"
       enctype="multipart/form-data">
 @csrf
+<input type="hidden" name="assessment_id" value="{{ $assessment->assessment_id }}">
 <input type="hidden" name="judul_assessment" value="{{ $assessment->judul_assessment }}">
 
 <div class="space-y-6">
@@ -52,9 +61,26 @@
         </div>
     @endif
 
+    {{-- BANNER NOTIFIKASI PINTAR --}}
+    @if($isReadOnly)
+        <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700 flex items-center gap-2">
+            <span class="material-symbols-outlined text-blue-500">verified</span>
+            Assessment ini sudah diverifikasi dan disetujui sepenuhnya. Tidak dapat diubah.
+        </div>
+    @elseif($isReviewPhase)
+        <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 flex items-center gap-2">
+            <span class="material-symbols-outlined text-amber-500">lock</span>
+            Assessment sedang direview oleh Approver. Seluruh form dikunci sementara agar data tidak berubah.
+        </div>
+    @elseif($isRevisiPhase)
+        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-center gap-2">
+            <span class="material-symbols-outlined text-red-500">warning</span>
+            Assessment dikembalikan! Silakan perbaiki Skor Maturitas dan unggah bukti baru HANYA pada jawaban yang DITOLAK.
+        </div>
+    @endif
+
     {{-- TAB FILTER --}}
     <div class="flex flex-wrap items-center gap-2">
-
         {{-- Semua Domain (dropdown trigger) --}}
         <div class="relative" id="domainDropdownWrapper">
             <button type="button" id="btnDomainDropdown"
@@ -70,10 +96,7 @@
                 class="hidden absolute left-0 top-full mt-2 z-30 min-w-[220px] rounded-2xl border border-gray-200 bg-white shadow-xl p-3 space-y-1">
                 <p class="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-2 pb-1">Pilih Domain</p>
 
-                {{-- Opsi: Semua --}}
-                <button type="button"
-                    class="domain-option w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-left transition-colors bg-primary/10 text-primary"
-                    data-domain="all">
+                <button type="button" class="domain-option w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-left transition-colors bg-primary/10 text-primary" data-domain="all">
                     <span class="material-symbols-outlined text-sm">select_all</span>
                     Semua Domain
                     <span class="ml-auto material-symbols-outlined text-sm text-primary" id="check-all">check</span>
@@ -81,7 +104,7 @@
 
                 @foreach($domains as $domain)
                     @php
-                        $optionColor = match($domain->kode) {
+                        $optionColor = match($domain->kode_domain) {
                             'GV' => 'text-purple-700 hover:bg-purple-50',
                             'ID' => 'text-blue-700 hover:bg-blue-50',
                             'PR' => 'text-green-700 hover:bg-green-50',
@@ -90,40 +113,30 @@
                             'RC' => 'text-red-700 hover:bg-red-50',
                             default => 'text-gray-700 hover:bg-gray-50',
                         };
-                        $dotColor = match($domain->kode) {
-                            'GV' => 'bg-purple-500',
-                            'ID' => 'bg-blue-500',
-                            'PR' => 'bg-green-500',
-                            'DE' => 'bg-yellow-500',
-                            'RS' => 'bg-orange-500',
-                            'RC' => 'bg-red-500',
+                        $dotColor = match($domain->kode_domain) {
+                            'GV' => 'bg-purple-500', 'ID' => 'bg-blue-500', 'PR' => 'bg-green-500',
+                            'DE' => 'bg-yellow-500', 'RS' => 'bg-orange-500', 'RC' => 'bg-red-500',
                             default => 'bg-gray-400',
                         };
                         $domainCount = $domain->kategoris->sum(fn($k) => $k->pertanyaans->count());
                     @endphp
-                    <button type="button"
-                        class="domain-option w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-left transition-colors {{ $optionColor }}"
-                        data-domain="{{ $domain->kode }}">
+                    <button type="button" class="domain-option w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-left transition-colors {{ $optionColor }}" data-domain="{{ $domain->kode_domain }}">
                         <span class="w-2 h-2 rounded-full shrink-0 {{ $dotColor }}"></span>
-                        <span class="font-mono">{{ $domain->kode }}</span>
+                        <span class="font-mono">{{ $domain->kode_domain }}</span>
                         <span class="font-normal opacity-70">{{ $domain->nama_domain }}</span>
                         <span class="ml-auto text-[10px] font-normal text-gray-400">{{ $domainCount }}</span>
-                        <span class="material-symbols-outlined text-sm opacity-0" id="check-{{ $domain->kode }}">check</span>
+                        <span class="material-symbols-outlined text-sm opacity-0" id="check-{{ $domain->kode_domain }}">check</span>
                     </button>
                 @endforeach
             </div>
         </div>
 
         {{-- Tab: Status --}}
-        <button type="button"
-            class="status-tab inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold transition-colors border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-            data-status="belum">
+        <button type="button" class="status-tab inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold transition-colors border border-gray-200 bg-white text-gray-600 hover:bg-gray-50" data-status="belum">
             <span class="material-symbols-outlined text-sm">radio_button_unchecked</span>
             Belum Diisi (<span id="count-belum">{{ $belumDiisi }}</span>)
         </button>
-        <button type="button"
-            class="status-tab inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold transition-colors border border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-            data-status="selesai">
+        <button type="button" class="status-tab inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold transition-colors border border-gray-200 bg-white text-gray-600 hover:bg-gray-50" data-status="selesai">
             <span class="material-symbols-outlined text-sm">check_circle</span>
             Selesai (<span id="count-selesai">{{ $terisi }}</span>)
         </button>
@@ -140,25 +153,19 @@
 
         @foreach($domains as $domain)
             @php
-                $domainBadgeClass = match($domain->kode) {
-                    'GV' => 'bg-purple-100 text-purple-700',
-                    'ID' => 'bg-blue-100 text-blue-700',
-                    'PR' => 'bg-green-100 text-green-700',
-                    'DE' => 'bg-yellow-100 text-yellow-700',
-                    'RS' => 'bg-orange-100 text-orange-700',
-                    'RC' => 'bg-red-100 text-red-700',
+                $domainBadgeClass = match($domain->kode_domain) {
+                    'GV' => 'bg-purple-100 text-purple-700', 'ID' => 'bg-blue-100 text-blue-700',
+                    'PR' => 'bg-green-100 text-green-700', 'DE' => 'bg-yellow-100 text-yellow-700',
+                    'RS' => 'bg-orange-100 text-orange-700', 'RC' => 'bg-red-100 text-red-700',
                     default => 'bg-gray-100 text-gray-700',
                 };
             @endphp
 
             @foreach($domain->kategoris as $kategori)
-
-                {{-- Subheading per Kategori NIST CSF --}}
                 @if($kategori->pertanyaans->count() > 0)
-                <div class="domain-section-header flex items-center gap-3 mt-6 mb-2"
-                     data-domain="{{ $domain->kode }}">
+                <div class="domain-section-header flex items-center gap-3 mt-6 mb-2" data-domain="{{ $domain->kode_domain }}">
                     <span class="inline-flex items-center rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider {{ $domainBadgeClass }}">
-                        {{ $domain->kode }} — {{ $domain->nama_domain }}
+                        {{ $domain->kode_domain }} — {{ $domain->nama_domain }}
                     </span>
                     <span class="text-xs font-bold text-gray-700">{{ $kategori->kode_kategori }} · {{ $kategori->nama_kategori }}</span>
                     <div class="flex-1 h-px bg-gray-100"></div>
@@ -166,21 +173,35 @@
                 </div>
                 @endif
 
-                {{-- Loop per kriteria keamanan siber --}}
                 @foreach($kategori->pertanyaans as $pertanyaan)
                     @php
                         $pid        = $pertanyaan->pertanyaan_id;
                         $jawaban    = $existingJawaban[$pid] ?? null;
                         $nilaiSaat  = $jawaban?->indeks_nilai ?? 0;
-                        $hasFile    = $jawaban?->file_bukti ?? null;
-                        $namaFile   = $jawaban?->nama_file_asli ?? null;
+                        $fileList   = $jawaban?->file_bukti ?? [];
+                        $namaList   = $jawaban?->nama_file_asli ?? [];
+                        $hasFile    = !empty($fileList);
                         $komentar   = $jawaban?->komentar_approver ?? null;
                         $sudahDiisi = $nilaiSaat > 0;
+                        $statusItem = $jawaban?->status_verifikasi;
+
+                        // 🔴 KUNCI LOGIKA PER ITEM 🔴
+                        // Kapan pertanyaan ini dikunci (disabled)?
+                        if ($isReadOnly || $isReviewPhase) {
+                            // Fase disetujui atau sedang direview approver = Kunci Semua
+                            $itemLocked = true;
+                        } elseif ($isRevisiPhase) {
+                            // Fase revisi = Buka kuncinya HANYA kalau ditolak approver
+                            $itemLocked = ($statusItem !== 'ditolak'); 
+                        } else {
+                            // Fase draft awal = Bebas isi semua
+                            $itemLocked = false;
+                        }
                     @endphp
 
                     <div class="question-card rounded-xl border bg-white shadow-sm overflow-hidden transition-all hover:shadow-md"
                          data-status="{{ $sudahDiisi ? 'selesai' : 'belum' }}"
-                         data-domain="{{ $domain->kode }}">
+                         data-domain="{{ $domain->kode_domain }}">
                         <div class="flex gap-6 p-6">
 
                             {{-- Konten Kiri --}}
@@ -202,6 +223,20 @@
                                             </span>
                                         @endif
                                     </span>
+                                     @if($statusItem)
+                                        @php
+                                            $svMap = [
+                                                'pending'   => ['bg-amber-100 text-amber-700', 'schedule', 'Menunggu Verifikasi'],
+                                                'disetujui' => ['bg-green-100 text-green-700', 'verified', 'Disetujui'],
+                                                'ditolak'   => ['bg-red-100 text-red-700',     'cancel',   'Ditolak — Perlu Revisi'],
+                                            ];
+                                            [$svClass, $svIcon, $svLabel] = $svMap[$statusItem] ?? ['bg-gray-100 text-gray-500', 'help', $statusItem];
+                                        @endphp
+                                        <span class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {{ $svClass }}">
+                                        <span class="material-symbols-outlined text-xs">{{ $svIcon }}</span>
+                                            {{ $svLabel }}
+                                        </span>
+                                    @endif
                                 </div>
 
                                 {{-- Judul & Deskripsi Pertanyaan --}}
@@ -212,35 +247,22 @@
                                     {{ $pertanyaan->deskripsi }}
                                 </p>
 
-                                {{-- Accordion Deskripsi Indeks 0-5 --}}
-                                @if($pertanyaan->indeks_0 || $pertanyaan->indeks_1)
-                                <div class="mb-4">
-                                    <button type="button"
-                                        onclick="toggleIndeks({{ $pid }})"
-                                        class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-primary hover:underline">
-                                        <span class="material-symbols-outlined text-sm">info</span>
-                                        Lihat Deskripsi Indeks
-                                    </button>
-                                    <div id="indeks-{{ $pid }}" class="hidden mt-2 rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-1.5">
-                                        @for($lvl = 0; $lvl <= 5; $lvl++)
-                                            @php $teks = $pertanyaan->{"indeks_{$lvl}"}; @endphp
-                                            @if($teks)
-                                            <div class="flex gap-2 text-xs">
-                                                <span class="shrink-0 w-5 font-bold text-primary">{{ $lvl }}</span>
-                                                <span class="text-gray-600 leading-relaxed">{{ $teks }}</span>
-                                            </div>
-                                            @endif
-                                        @endfor
-                                    </div>
-                                </div>
-                                @endif
-
                                 {{-- Feedback Approver --}}
-                                @if($komentar)
-                                <div class="rounded-lg border border-red-200 bg-red-50 p-3 mb-4 flex items-start gap-2">
-                                    <span class="material-symbols-outlined text-red-500 text-sm mt-0.5">warning</span>
-                                    <p class="text-xs text-red-700 leading-relaxed">{{ $komentar }}</p>
-                                </div>
+                                @if($statusItem === 'ditolak')
+                                    <div class="rounded-lg border border-red-200 bg-red-50 p-3 mb-4 flex items-start gap-2">
+                                        <span class="material-symbols-outlined text-red-500 text-sm mt-0.5">warning</span>
+                                        <div>
+                                            <p class="text-[10px] font-bold text-red-600 uppercase tracking-wider mb-1">Catatan Approver</p>
+                                            <p class="text-xs text-red-700 leading-relaxed">
+                                            {{ $komentar ?? 'Jawaban ditolak. Silakan perbaiki dan upload ulang bukti.' }}
+                                             </p>
+                                        </div>
+                                    </div>
+                                @elseif($statusItem === 'disetujui')
+                                    <div class="rounded-lg border border-green-200 bg-green-50 p-3 mb-4 flex items-start gap-2">
+                                        <span class="material-symbols-outlined text-green-500 text-sm mt-0.5">check_circle</span>
+                                        <p class="text-xs text-green-700 leading-relaxed font-medium">Jawaban telah diverifikasi dan disetujui.</p>
+                                    </div>
                                 @endif
 
                                 {{-- Pilih Skor Maturitas --}}
@@ -250,19 +272,16 @@
                                         @for($level = 1; $level <= 5; $level++)
                                             <button type="button"
                                                 class="maturity-btn w-10 h-10 rounded-lg border text-sm font-bold transition-all
-                                                    {{ $nilaiSaat == $level
-                                                        ? 'bg-primary text-white border-primary shadow-md scale-110'
-                                                        : 'bg-white text-gray-500 border-gray-200 hover:border-primary hover:text-primary' }}"
+                                                {{ $nilaiSaat == $level ? 'bg-primary text-white border-primary shadow-md scale-110' : 'bg-white text-gray-500 border-gray-200 hover:border-primary hover:text-primary' }}
+                                                {{ $itemLocked ? 'opacity-50 cursor-not-allowed' : '' }}"
                                                 data-level="{{ $level }}"
-                                                data-pid="{{ $pid }}">
+                                                data-pid="{{ $pid }}"
+                                                {{ $itemLocked ? 'disabled' : '' }}>
                                                 {{ $level }}
                                             </button>
                                         @endfor
 
-                                        <input type="hidden"
-                                            name="scores[{{ $pid }}]"
-                                            id="score-{{ $pid }}"
-                                            value="{{ $nilaiSaat }}">
+                                        <input type="hidden" name="scores[{{ $pid }}]" id="score-{{ $pid }}" value="{{ $nilaiSaat }}">
 
                                         @php $levelLabels = [1=>'Partial', 2=>'Risk Informed', 3=>'Repeatable', 4=>'Adaptive', 5=>'Optimal']; @endphp
                                         <span class="ml-2 text-xs font-semibold text-primary" id="level-label-{{ $pid }}">
@@ -279,31 +298,35 @@
                                 </p>
 
                                 @if($hasFile)
-                                <div class="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 mb-2">
-                                    <span class="material-symbols-outlined text-red-500 text-lg">picture_as_pdf</span>
-                                    <span class="text-xs font-medium text-gray-700 truncate flex-1">
-                                        {{ $namaFile ?? basename($hasFile) }}
-                                    </span>
-                                </div>
+                                    <div class="space-y-1 mb-2">
+                                @foreach($fileList as $i => $path)
+                                    <a href="{{ route('bukti.preview', ['jawaban_id' => $jawaban->jawaban_id, 'index' => $i]) }}"
+                                        target="_blank"
+                                        class="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 hover:bg-gray-100 transition-colors">
+                                        <span class="material-symbols-outlined text-red-500 text-base">description</span>
+                                        <span class="text-[11px] font-medium text-gray-700 truncate flex-1">
+                                            {{ $namaList[$i] ?? basename($path) }}
+                                        </span>
+                                    </a>
+                                @endforeach
+                                    </div>
                                 @endif
 
+                                {{-- Tampilkan form upload jika tidak dilock --}}
+                                @if(!$itemLocked)
                                 <label class="flex flex-col items-center justify-center w-full h-20 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 cursor-pointer hover:border-primary hover:bg-red-50 transition-all">
                                     <span class="material-symbols-outlined text-gray-400 text-xl mb-1">upload_file</span>
                                     <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider" id="filename-{{ $pid }}">
-                                        {{ $hasFile ? 'Ganti File' : 'Unggah Bukti' }}
+                                        {{ $hasFile ? 'Ganti Bukti Baru' : 'Unggah Bukti' }}
                                     </span>
-                                    <input type="file"
-                                        name="files[{{ $pid }}]"
-                                        class="hidden"
-                                        accept=".pdf,.jpg,.jpeg,.png"
-                                        data-pid="{{ $pid }}"
-                                        onchange="updateFileName(this)">
+                                <input type="file"
+                                    name="files[{{ $pid }}][]"
+                                    class="hidden"
+                                    accept=".pdf,.jpg,.jpeg,.png"
+                                    data-pid="{{ $pid }}"
+                                    multiple
+                                    onchange="updateFileName(this)">
                                 </label>
-
-                                @if($nilaiSaat >= 3 && !$hasFile)
-                                    <p class="text-[9px] text-amber-600 mt-1 font-semibold">
-                                        ⚠ Wajib untuk skor di atas 3
-                                    </p>
                                 @endif
                             </div>
                         </div>
@@ -315,6 +338,7 @@
     </div>
 
     {{-- FOOTER AKSI --}}
+    @if($showFooterAksi)
     <div class="sticky bottom-0 z-20 rounded-xl border border-gray-200 bg-white/95 backdrop-blur p-4 shadow-lg flex flex-col sm:flex-row items-center gap-4">
         <div class="flex items-center gap-3 text-sm text-gray-500">
             <span class="material-symbols-outlined text-amber-500">warning</span>
@@ -338,6 +362,7 @@
             </button>
         </div>
     </div>
+    @endif
 
 </div>
 </form>
@@ -345,17 +370,9 @@
 <script>
     const levelLabels = {1:'Partial', 2:'Risk Informed', 3:'Repeatable', 4:'Adaptive', 5:'Optimal'};
 
-    // ─── State filter ─────────────────────────────────────────────────────────
-    let activeStatus  = 'all';      // 'all' | 'belum' | 'selesai'
-    let activeDomains = new Set();  // kosong = semua domain
+    let activeStatus  = 'all';
+    let activeDomains = new Set();
 
-    // ─── Toggle deskripsi indeks ──────────────────────────────────────────────
-    function toggleIndeks(pid) {
-        const el = document.getElementById(`indeks-${pid}`);
-        if (el) el.classList.toggle('hidden');
-    }
-
-    // ─── Dropdown domain ──────────────────────────────────────────────────────
     const dropdown  = document.getElementById('domainDropdown');
     const chevron   = document.getElementById('domainChevron');
     const btnDomain = document.getElementById('btnDomainDropdown');
@@ -367,7 +384,6 @@
         chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
     });
 
-    // Tutup dropdown kalau klik di luar
     document.addEventListener('click', (e) => {
         if (!document.getElementById('domainDropdownWrapper').contains(e.target)) {
             dropdown.classList.add('hidden');
@@ -375,14 +391,12 @@
         }
     });
 
-    // Pilih domain dari dropdown
     document.querySelectorAll('.domain-option').forEach(opt => {
         opt.addEventListener('click', (e) => {
             e.stopPropagation();
             const kode = opt.dataset.domain;
 
             if (kode === 'all') {
-                // Reset ke semua domain
                 activeDomains.clear();
                 document.querySelectorAll('.domain-option').forEach(o => {
                     document.getElementById(`check-${o.dataset.domain}`)?.classList.add('opacity-0');
@@ -392,8 +406,6 @@
                 document.getElementById('check-all').classList.remove('opacity-0');
                 document.getElementById('domainBtnLabel').textContent = 'Semua Domain';
             } else {
-                // Toggle domain ini
-                // Pastikan "Semua" tidak aktif lagi
                 document.getElementById('check-all').classList.add('opacity-0');
                 document.querySelector('.domain-option[data-domain="all"]').classList.remove('bg-primary/10');
 
@@ -407,7 +419,6 @@
                     opt.classList.add('bg-primary/10');
                 }
 
-                // Kalau tidak ada yang dipilih, balik ke "Semua"
                 if (activeDomains.size === 0) {
                     document.querySelector('.domain-option[data-domain="all"]').classList.add('bg-primary/10');
                     document.getElementById('check-all').classList.remove('opacity-0');
@@ -417,12 +428,10 @@
                     document.getElementById('domainBtnLabel').textContent = labels;
                 }
             }
-
             applyFilter();
         });
     });
 
-    // ─── Status tab (single-select) ───────────────────────────────────────────
     document.querySelectorAll('.status-tab').forEach(btn => {
         btn.addEventListener('click', () => {
             activeStatus = btn.dataset.status;
@@ -436,7 +445,6 @@
         });
     });
 
-    // ─── Terapkan filter ──────────────────────────────────────────────────────
     function applyFilter() {
         const noDomainFilter = activeDomains.size === 0;
 
@@ -449,7 +457,6 @@
         document.querySelectorAll('.domain-section-header').forEach(header => {
             const domainMatch = noDomainFilter || activeDomains.has(header.dataset.domain);
             if (!domainMatch) { header.classList.add('hidden'); return; }
-            // Sembunyikan header jika tidak ada card visible di domain ini
             const hasVisible = Array.from(
                 document.querySelectorAll(`.question-card[data-domain="${header.dataset.domain}"]`)
             ).some(c => !c.classList.contains('hidden'));
@@ -457,22 +464,18 @@
         });
     }
 
-    // ─── Helper: reset skor sebuah pertanyaan ────────────────────────────────
     function resetSkor(pid) {
-        // Reset semua tombol skor
         document.querySelectorAll(`.maturity-btn[data-pid="${pid}"]`).forEach(b => {
             b.classList.remove('bg-primary', 'text-white', 'border-primary', 'shadow-md', 'scale-110');
             b.classList.add('bg-white', 'text-gray-500', 'border-gray-200');
         });
 
-        // Kosongkan hidden input & label
         const scoreInput = document.getElementById(`score-${pid}`);
         if (scoreInput) scoreInput.value = 0;
 
         const label = document.getElementById(`level-label-${pid}`);
         if (label) label.textContent = 'Belum dipilih';
 
-        // Update badge → Belum Diisi
         const badgeContainer = document.getElementById(`status-badge-${pid}`);
         if (badgeContainer) {
             badgeContainer.innerHTML = `
@@ -481,7 +484,6 @@
                 </span>`;
         }
 
-        // Update data-status card
         const card = document.querySelector(`.question-card:has(#score-${pid})`);
         if (card) card.dataset.status = 'belum';
 
@@ -489,34 +491,28 @@
         applyFilter();
     }
 
-    // ─── Maturity Level click — toggle off jika klik skor yang sama ───────────
     document.querySelectorAll('.maturity-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const pid      = btn.dataset.pid;
             const level    = parseInt(btn.dataset.level);
             const current  = parseInt(document.getElementById(`score-${pid}`).value || 0);
 
-            // Klik skor yang sudah aktif → reset (toggle off)
             if (current === level) {
                 resetSkor(pid);
                 return;
             }
 
-            // Reset semua tombol skor dalam grup ini
             document.querySelectorAll(`.maturity-btn[data-pid="${pid}"]`).forEach(b => {
                 b.classList.remove('bg-primary', 'text-white', 'border-primary', 'shadow-md', 'scale-110');
                 b.classList.add('bg-white', 'text-gray-500', 'border-gray-200');
             });
 
-            // Aktifkan tombol yang dipilih
             btn.classList.add('bg-primary', 'text-white', 'border-primary', 'shadow-md', 'scale-110');
             btn.classList.remove('bg-white', 'text-gray-500', 'border-gray-200');
 
-            // Update hidden input & label
             document.getElementById(`score-${pid}`).value = level;
             document.getElementById(`level-label-${pid}`).textContent = levelLabels[level] || '';
 
-            // Update badge → Selesai
             const badgeContainer = document.getElementById(`status-badge-${pid}`);
             if (badgeContainer) {
                 badgeContainer.innerHTML = `
@@ -525,7 +521,6 @@
                     </span>`;
             }
 
-            // Update data-status card
             const card = btn.closest('.question-card');
             if (card) card.dataset.status = 'selesai';
 
@@ -534,7 +529,6 @@
         });
     });
 
-    // ─── Update counter tabs + progress bar + footer ──────────────────────────
     function updateCounters() {
         const allCards  = document.querySelectorAll('.question-card');
         const total     = allCards.length;
@@ -542,13 +536,11 @@
         const belum     = total - selesai;
         const pct       = total > 0 ? Math.round((selesai / total) * 100) : 0;
 
-        // Tab counter
         const elBelum   = document.getElementById('count-belum');
         const elSelesai = document.getElementById('count-selesai');
         if (elBelum)   elBelum.textContent   = belum;
         if (elSelesai) elSelesai.textContent  = selesai;
 
-        // Progress bar & label
         const bar      = document.getElementById('progress-bar');
         const pctLabel = document.getElementById('pct-label');
         const progText = document.getElementById('progress-text');
@@ -556,22 +548,21 @@
         if (pctLabel) pctLabel.textContent      = pct + '%';
         if (progText) progText.textContent      = `${selesai} dari ${total} pertanyaan selesai`;
 
-        // Footer counter
         const footerCount = document.getElementById('footer-count-belum');
         if (footerCount) footerCount.textContent = belum;
     }
 
-    // ─── Update nama file setelah upload ──────────────────────────────────────
     function updateFileName(input) {
         const pid  = input.dataset.pid;
         const span = document.getElementById(`filename-${pid}`);
-        if (input.files && input.files[0] && span) {
-            span.textContent = input.files[0].name;
+        if (input.files && input.files.length > 0 && span) {
+            span.textContent = input.files.length === 1
+                ? input.files[0].name
+                : `${input.files.length} file dipilih`;
         }
     }
 
-    // ─── Draft & Submit ───────────────────────────────────────────────────────
-    document.getElementById('btnDraft').addEventListener('click', () => {
+    document.getElementById('btnDraft')?.addEventListener('click', () => {
         const inp   = document.createElement('input');
         inp.type    = 'hidden';
         inp.name    = 'action';
@@ -580,7 +571,7 @@
         document.getElementById('assessmentForm').submit();
     });
 
-    document.getElementById('btnSubmit').addEventListener('click', () => {
+    document.getElementById('btnSubmit')?.addEventListener('click', () => {
         const scores   = document.querySelectorAll('[name^="scores["]');
         const adaDiisi = Array.from(scores).some(i => parseInt(i.value) > 0);
 
@@ -589,7 +580,7 @@
             return;
         }
 
-        if (confirm('Yakin ingin submit assessment?\nSetelah disubmit, tidak bisa diedit kecuali dikembalikan Approver.')) {
+        if (confirm('Yakin ingin submit assessment?\nSetelah disubmit, form akan dikunci untuk direview oleh Approver.')) {
             document.getElementById('assessmentForm').submit();
         }
     });

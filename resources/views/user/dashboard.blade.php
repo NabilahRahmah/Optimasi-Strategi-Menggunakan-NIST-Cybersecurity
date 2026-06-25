@@ -111,7 +111,40 @@
             @else
                 <div class="space-y-3">
                     @foreach($my_assessments as $assessment)
-                        <div class="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-4 hover:border-red-100 hover:shadow-sm transition-all group">
+                                                   
+                            {{-- Logic Status Colors --}}
+                            @php
+                                $status = $assessment->status ?? 'draft';
+                                if (in_array($status, ['disetujui', 'selesai'])) {
+                                    $targetUrl = route('user.hasil.show', $assessment->assessment_id);
+                                } else {
+                                // Jika masih draft, review, atau ditolak, arahkan ke Form Assessment
+                                    $targetUrl = route('user.assessment.index', [
+                                        'framework_id' => $assessment->framework_id,
+                                        'assessment_id' => $assessment->assessment_id
+                                    ]);
+                                }
+
+                                $statusClass = match($status) {
+                                    'disetujui'  => 'bg-emerald-100 text-emerald-800 border-emerald-200',
+                                    'submitted'  => 'bg-blue-100 text-blue-800 border-blue-200',
+                                    'in_review'  => 'bg-amber-100 text-amber-800 border-amber-200',
+                                    'ditolak'    => 'bg-red-100 text-red-800 border-red-200',
+                                    'draft'      => 'bg-gray-100 text-gray-800 border-gray-200',
+                                    default      => 'bg-gray-100 text-gray-800 border-gray-200',
+                                };
+                                $statusLabel = match($status) {
+                                    'disetujui'  => 'Selesai',
+                                    'submitted'  => 'Menunggu Verifikasi',
+                                    'in_review'  => 'Sedang Direview',
+                                    'ditolak'    => 'Perlu Revisi',
+                                    'draft'      => 'Draft',
+                                    default      => $status,
+                                };
+                            @endphp
+
+                            <a href="{{ $targetUrl }}"
+                            class="flex items-center justify-between rounded-xl border border-gray-100 bg-white p-4 hover:border-red-100 hover:shadow-sm transition-all group">
                             <div class="flex items-center gap-4">
                                 <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-red-50 group-hover:text-primary transition-colors">
                                     <span class="material-symbols-outlined text-sm">description</span>
@@ -124,22 +157,11 @@
                                     </p>
                                 </div>
                             </div>
-                            
-                            {{-- Logic Status Colors --}}
-                            @php
-                                $status = $assessment->status ?? 'pending';
-                                $statusClass = match($status) {
-                                    'completed' => 'bg-emerald-100 text-emerald-800 border-emerald-200',
-                                    'submitted' => 'bg-blue-100 text-blue-800 border-blue-200',
-                                    'assessed'  => 'bg-amber-100 text-amber-800 border-amber-200',
-                                    default     => 'bg-gray-100 text-gray-800 border-gray-200',
-                                };
-                            @endphp
-                            
+
                             <span class="inline-flex items-center rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wider {{ $statusClass }}">
-                                {{ $status }}
+                                {{ $statusLabel }}
                             </span>
-                        </div>
+                        </a>
                     @endforeach
                 </div>
             @endif

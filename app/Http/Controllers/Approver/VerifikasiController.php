@@ -18,15 +18,20 @@ class VerifikasiController extends Controller
 
     public function index()
     {
+        $approverId = auth()->user()->user_id;
+
+        $frameworkIds = \App\Models\FrameworkAssignment::where('user_id', $approverId)
+            ->pluck('framework_id');
+
         $assessments = Assessment::with('user')
             ->whereIn('status', ['submitted', 'in_review'])
+            ->whereIn('framework_id', $frameworkIds) // ← filter ini
             ->latest()
             ->get();
 
         return view('approver.verifikasi.index', compact('assessments'));
     }
 
-   
     public function show(Assessment $assessment)
     {
         $assessment->load([
@@ -51,17 +56,16 @@ class VerifikasiController extends Controller
         return view('approver.verifikasi.show', compact('assessment', 'grouped'));
     }
 
-    public function approved(Assessment $assessment)
+    public function disetujui(Assessment $assessment)
     {
-        if ($assessment->status !== 'approved') {
+        if ($assessment->status !== 'disetujui') {
             return redirect()->route('approver.verifikasi.index')
                 ->with('error', 'Akses ditolak. Assessment ini belum selesai diverifikasi.');
         }
         $hasil = \App\Models\Hasil::where('assessment_id', $assessment->assessment_id)->first();
         $nilai_total = $hasil ? $hasil->nilai_kematangan : 0;
-        return view('approver.verifikasi.approved', compact('assessment', 'nilai_total'));
+        return view('approver.verifikasi.disetujui', compact('assessment', 'nilai_total'));
     }
-
 
     public function verifikasiItem(Request $request, AssessmentJawaban $jawaban)
     {
@@ -81,24 +85,40 @@ class VerifikasiController extends Controller
             ->whereIn('status_verifikasi', ['disetujui', 'ditolak'])
             ->count();
 
-        if ($totalJawaban > 0 && $sudahVerif === $totalJawaban) {
+        $adaDitolak = $assessment->jawabans()
+            ->where('status_verifikasi', 'ditolak')
+            ->exists();
+
+        $semuaSelesai = $totalJawaban > 0 && $sudahVerif === $totalJawaban;
+
+        if ($semuaSelesai) {
             try {
-                $this->skor->calculate($assessment->assessment_id);
-                $assessment->update(['status' => 'approved']);
+                if ($adaDitolak) {
+                    $assessment->update(['status' => 'ditolak']);
+                } else {
+                    $this->skor->calculate($assessment->assessment_id);
+                    $assessment->update(['status' => 'disetujui']);
+                }
             } catch (\Exception $e) {
                 Log::error('[Verifikasi] Gagal hitung skor', [
                     'assessment_id' => $assessment->assessment_id,
                     'error' => $e->getMessage(),
                 ]);
             }
+        } elseif ($adaDitolak) {
+            $assessment->update(['status' => 'ditolak']);
         }
 
-        return back()->with(
-            'success',
-            'Jawaban berhasil di-' . $request->status . '!'
-        );
-    }
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Jawaban berhasil di-' . $request->status . '!',
+                'semua_selesai' => $semuaSelesai,
+            ]);
+        }
 
+        return back()->with('success', 'Jawaban berhasil di-' . $request->status . '!');
+    }
     public function saveJawaban(Request $request, $assessment_id)
     {
         $assessment = Assessment::findOrFail($assessment_id);
@@ -107,7 +127,13 @@ class VerifikasiController extends Controller
             'pertanyaan_id' => 'required|exists:pertanyaans,pertanyaan_id',
             'indeks_nilai' => 'nullable|integer|min:0|max:5',
             'komentar_approver' => 'nullable|string|max:1000',
-            'file_bukti' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'file_bukti.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'file_bukti' => 'nullable',
+        ]);
+
+        $jawaban = AssessmentJawaban::firstOrCreate([
+            'assessment_id' => $assessment->assessment_id,
+            'pertanyaan_id' => $request->pertanyaan_id,
         ]);
 
         $data = [];
@@ -120,29 +146,31 @@ class VerifikasiController extends Controller
             $data['komentar_approver'] = $request->komentar_approver;
         }
 
-        if ($request->hasFile('file_bukti') && $request->file('file_bukti')->isValid()) {
-            $file = $request->file('file_bukti');
+        // Multi-file: append ke array yang sudah ada
+        if ($request->hasFile('file_bukti')) {
+            $uploadedFiles = $request->file('file_bukti');
+            $uploadedFiles = is_array($uploadedFiles) ? $uploadedFiles : [$uploadedFiles];
 
-            $existing = AssessmentJawaban::where('assessment_id', $assessment->assessment_id)
-                ->where('pertanyaan_id', $request->pertanyaan_id)
-                ->first();
-            if ($existing?->file_bukti) {
-                \Storage::disk('local')->delete($existing->file_bukti);
+            $pathList = $jawaban->file_bukti ?? [];
+            $namaList = $jawaban->nama_file_asli ?? [];
+            $ukuranList = $jawaban->ukuran_file ?? [];
+
+            foreach ($uploadedFiles as $file) {
+                if ($file && $file->isValid()) {
+                    $pathList[] = $file->store('bukti_audit', 'public');
+                    $namaList[] = $file->getClientOriginalName();
+                    $ukuranList[] = $file->getSize();
+                }
             }
 
-            $data['file_bukti'] = $file->store('bukti_audit', 'local');
-            $data['nama_file_asli'] = $file->getClientOriginalName();
-            $data['ukuran_file'] = $file->getSize();
+            $data['file_bukti'] = $pathList;
+            $data['nama_file_asli'] = $namaList;
+            $data['ukuran_file'] = $ukuranList;
         }
 
         if (empty($data)) {
             return response()->json(['success' => true, 'message' => 'Tidak ada perubahan']);
         }
-
-        $jawaban = AssessmentJawaban::firstOrCreate([
-            'assessment_id' => $assessment->assessment_id,
-            'pertanyaan_id' => $request->pertanyaan_id,
-        ]);
 
         if (in_array($jawaban->status_verifikasi, [null, 'rejected'])) {
             $data['status_verifikasi'] = 'pending';
@@ -153,11 +181,45 @@ class VerifikasiController extends Controller
         return response()->json(['success' => true]);
     }
 
+    public function previewFile($jawaban_id, $index = 0)
+    {
+        $jawaban = AssessmentJawaban::findOrFail($jawaban_id);
+
+        $paths = $jawaban->file_bukti ?? [];
+        $namas = $jawaban->nama_file_asli ?? [];
+
+        if (empty($paths) || !isset($paths[$index])) {
+            abort(404, 'File tidak ditemukan.');
+        }
+
+        $fullPath = storage_path('app/' . $paths[$index]);
+
+        if (!file_exists($fullPath)) {
+            abort(404, 'File tidak ditemukan di storage.');
+        }
+
+        $namaFile = $namas[$index] ?? basename($paths[$index]);
+        $ext = strtolower(pathinfo($namaFile, PATHINFO_EXTENSION));
+        $mimeMap = [
+            'pdf' => 'application/pdf',
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'doc' => 'application/msword',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ];
+
+        return response()->file($fullPath, [
+            'Content-Type' => $mimeMap[$ext] ?? 'application/octet-stream',
+            'Content-Disposition' => 'inline; filename="' . $namaFile . '"',
+        ]);
+    }
+
     public function finalisasi(Assessment $assessment)
     {
         try {
             $result = $this->skor->calculate($assessment->assessment_id);
-            $assessment->update(['status' => 'approved']);
+            $assessment->update(['status' => 'disetujui']);
 
             return response()->json([
                 'success' => true,

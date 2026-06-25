@@ -10,11 +10,11 @@ use Illuminate\Http\Request;
 
 class RekomendasiController extends Controller
 {
-    // List semua assessment approved yang bisa dikasih rekomendasi manual
+    // List semua assessment disetujui yang bisa dikasih rekomendasi manual
     public function index()
     {
         $assessments = Assessment::with(['user', 'rekomendasis'])
-            ->where('status', 'approved')
+            ->where('status', 'disetujui')
             ->latest()
             ->get();
 
@@ -25,7 +25,7 @@ class RekomendasiController extends Controller
     public function create(Assessment $assessment)
     {
         $domains = Domain::where('framework_id', $assessment->framework_id)
-            ->orderBy('kode')
+            ->orderBy('kode_domain')
             ->get();
 
         $rekomendasis = Rekomendasi::with('domain')

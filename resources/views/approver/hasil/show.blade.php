@@ -80,7 +80,7 @@
                     @php
                         $pct  = ($hasil->nilai_kematangan / 5) * 100;
                         $lv   = $levelColor($hasil->nilai_kematangan);
-                        $kode = $hasil->domain->kode ?? '??';
+                        $kode = $hasil->domain->kode_domain ?? '??';
                         $dc   = $domainColor[$kode] ?? 'bg-gray-100 text-gray-700';
                     @endphp
                     <div>
@@ -131,12 +131,12 @@
                     @foreach($rataRataPerKategori as $data)
                         @php
                             $lv = $levelColor($data->rata_rata_kategori);
-                            $dc = $domainColor[$data->kode] ?? 'bg-gray-100 text-gray-700';
+                            $dc = $domainColor[$data->kode_domain] ?? 'bg-gray-100 text-gray-700';
                         @endphp
                         <tr class="hover:bg-gray-50">
                             <td class="px-6 py-3">
                                 <span class="inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold {{ $dc }}">
-                                    {{ $data->kode }} — {{ $data->nama_domain }}
+                                    {{ $data->kode_domain }} — {{ $data->nama_domain }}
                                 </span>
                             </td>
                             <td class="px-4 py-3 text-xs">
@@ -201,7 +201,7 @@
             @foreach($rekOtomatis->take(10) as $rek)
                 @php
                     $bp  = match($rek->prioritas) { 'Tinggi' => 'bg-red-100 text-red-700', 'Sedang' => 'bg-yellow-100 text-yellow-700', default => 'bg-green-100 text-green-700' };
-                    $kode = $rek->domain->kode ?? '??';
+                    $kode = $rek->domain->kode_domain ?? '??';
                     $dc   = $domainColor[$kode] ?? 'bg-gray-100 text-gray-700';
                 @endphp
                 <div class="flex gap-4 px-6 py-3 hover:bg-gray-50">

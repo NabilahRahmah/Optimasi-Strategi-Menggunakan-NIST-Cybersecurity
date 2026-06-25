@@ -17,9 +17,8 @@ class HasilController extends Controller
 {
     public function index()
     {
-        // Menampilkan daftar assessment yang sudah disubmit oleh user
         $assessments = Assessment::where('user_id', auth()->id())
-            ->whereIn('status', ['submitted', 'in_review', 'approved'])
+            ->whereIn('status', ['submitted', 'in_review', 'disetujui'])
             ->latest()
             ->get();
 
@@ -54,20 +53,20 @@ class HasilController extends Controller
             ->where('assessment_jawabans.assessment_id', $assessment_id)
             ->whereNotNull('assessment_jawabans.indeks_nilai')
             ->select(
-                'domains.kode',
+                'domains.kode_domain',
                 'domains.nama_domain',
                 'kategoris.kode_kategori',
                 'kategoris.nama_kategori',
                 DB::raw('ROUND(AVG(assessment_jawabans.indeks_nilai), 2) as rata_rata_kategori')
             )
-            ->groupBy('domains.domain_id', 'domains.kode', 'domains.nama_domain', 'kategoris.kategori_id', 'kategoris.kode_kategori', 'kategoris.nama_kategori')
+            ->groupBy('domains.domain_id', 'domains.kode_domain', 'domains.nama_domain', 'kategoris.kategori_id', 'kategoris.kode_kategori', 'kategoris.nama_kategori')
             ->orderBy('domains.domain_id')
             ->orderBy('kategoris.kode_kategori')
             ->get();
 
         // Skor per domain untuk view user (format array kode => nilai)
         $skorPerDomain = $hasils->mapWithKeys(fn($h) => [
-            $h->domain->kode => $h->nilai_kematangan
+            $h->domain->kode_domain => $h->nilai_kematangan
         ])->toArray();
 
         return view('user.hasil.show', compact(
@@ -82,7 +81,7 @@ class HasilController extends Controller
         ));
     }
 
-    public function cetakPDF($assessment_id)
+    public function cetakPDF(Request $request, $assessment_id)
     {
         $assessment = Assessment::with('user')->findOrFail($assessment_id);
 
@@ -104,7 +103,7 @@ class HasilController extends Controller
             ->where('assessment_jawabans.assessment_id', $assessment_id)
             ->whereNotNull('assessment_jawabans.indeks_nilai')
             ->select(
-                'domains.kode',
+                'domains.kode_domain',
                 'domains.nama_domain',
                 'kategoris.kode_kategori',
                 'kategoris.nama_kategori',
@@ -112,7 +111,7 @@ class HasilController extends Controller
             )
             ->groupBy(
                 'domains.domain_id',
-                'domains.kode',
+                'domains.kode_domain',
                 'domains.nama_domain',
                 'kategoris.kategori_id',
                 'kategoris.kode_kategori',
@@ -123,8 +122,10 @@ class HasilController extends Controller
             ->get();
 
         $skorPerDomain = $hasils->mapWithKeys(fn($h) => [
-            $h->domain->kode => $h->nilai_kematangan
+            $h->domain->kode_domain => $h->nilai_kematangan
         ])->toArray();
+
+        $radarImage = $request->input('radar_image');
 
         $pdf = Pdf::loadView('user.hasil.pdf', compact(
             'assessment',
@@ -132,7 +133,8 @@ class HasilController extends Controller
             'rekomendasis',
             'nilai_total',
             'rataRataPerKategori',
-            'skorPerDomain'
+            'skorPerDomain',
+            'radarImage'  
         ))->setPaper('a4', 'portrait');
 
         $filename = 'Laporan-Assessment-' .
@@ -158,19 +160,17 @@ class HasilController extends Controller
                 ->whereNotNull('indeks_nilai')
                 ->avg('indeks_nilai') ?? 0;
 
-            $gap = round($domain->target_nilai - $rata_rata, 2);
+            $targetNilai = 3; 
+            $gap = round($targetNilai - $rata_rata, 2);
             $level = $this->tentukanLevel($rata_rata);
 
             Hasil::updateOrCreate(
+                ['assessment_id' => $assessment_id, 'domain_id' => $domain->domain_id],
                 [
-                    'assessment_id' => $assessment_id,
-                    'domain_id' => $domain->domain_id,
-                ],
-                [
-                    'nilai_kematangan' => round($rata_rata, 2),
-                    'target_nilai' => $domain->target_nilai,
-                    'gap' => $gap,
-                    'level_kematangan' => $level,
+                'nilai_kematangan' => round($rata_rata, 2),
+                'target_nilai'     => $targetNilai,
+                'gap'              => $gap,
+                'level_kematangan' => $level,
                 ]
             );
         }

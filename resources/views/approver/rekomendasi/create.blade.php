@@ -59,8 +59,8 @@
             <div class="flex justify-end">
                 <button type="submit"
                     class="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white hover:bg-red-800 transition">
-                    <span class="material-symbols-outlined text-lg">add</span>
-                    Tambah Rekomendasi
+                    <span class="material-symbols-outlined text-lg">save</span>
+                        Simpan Rekomendasi
                 </button>
             </div>
         </form>

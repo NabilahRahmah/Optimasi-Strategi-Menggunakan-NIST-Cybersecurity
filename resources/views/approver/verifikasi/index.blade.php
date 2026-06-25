@@ -6,7 +6,7 @@
     <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
             <h1 class="text-2xl font-bold tracking-tight text-foreground">
-                {{ $pageTitle ?? 'Queue Verifikasi' }}
+                {{ $pageTitle ?? 'Verifikasi' }}
             </h1>
             <p class="text-sm text-muted-foreground mt-1">
                 Kelola dan pantau status verifikasi assessment keamanan siber.
@@ -23,9 +23,9 @@
                    : 'border-transparent text-gray-500 hover:text-gray-700' }}">
             ⏳ Antrian
         </a>
-        <a href="{{ route('approver.verifikasi.approved') }}"
+        <a href="{{ route('approver.verifikasi.disetujui') }}"
            class="px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition
-               {{ ($activeTab ?? '') === 'approved'
+               {{ ($activeTab ?? '') === 'disetujui'
                    ? 'border-primary text-primary bg-primary/5'
                    : 'border-transparent text-gray-500 hover:text-gray-700' }}">
             ✅ Selesai Diverifikasi
@@ -72,8 +72,8 @@
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">Menunggu</span>
                             @elseif($assessment->status === 'in_review')
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">Sedang Direview</span>
-                            @elseif($assessment->status === 'approved')
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">✓ Approved</span>
+                            @elseif($assessment->status === 'disetujui')
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">✓ disetujui</span>
                             @endif
                         </td>
                         <td class="px-6 py-4">
@@ -91,7 +91,7 @@
                             <a href="{{ route('approver.verifikasi.show', $assessment->assessment_id) }}"
                                class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-primary hover:bg-red-800 px-3 py-1.5 rounded-lg transition">
                                 <span class="material-symbols-outlined text-sm">rate_review</span>
-                                {{ $assessment->status === 'approved' ? 'Lihat Detail' : 'Review' }}
+                                {{ $assessment->status === 'disetujui' ? 'Lihat Detail' : 'Review' }}
                             </a>
                         </td>
                     </tr>

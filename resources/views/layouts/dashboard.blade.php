@@ -66,13 +66,13 @@
             ],
             'approver' => [
                 ['label' => 'Dashboard',        'route' => 'approver.dashboard',         'icon' => 'dashboard'],
-                ['label' => 'Queue Verifikasi', 'route' => 'approver.verifikasi.index',  'icon' => 'rate_review'],
+                ['label' => 'Verifikasi', 'route' => 'approver.verifikasi.index',  'icon' => 'rate_review'],
                 ['label' => 'Rekomendasi',      'route' => 'approver.rekomendasi.index', 'icon' => 'lightbulb'],
                 ['label' => 'Hasil Assessment', 'route' => 'approver.hasil.index',       'icon' => 'bar_chart'],
             ],
             default => [
                 ['label' => 'Dashboard',         'route' => 'user.dashboard',        'icon' => 'dashboard'],
-                ['label' => 'Self Assessment',   'route' => 'assessment.create',     'icon' => 'fact_check'],
+                ['label' => 'Self Assessment',   'route' => 'user.assessment.pilihFramework',     'icon' => 'fact_check'],
                 // ['label' => 'Dokumen Pendukung', 'route' => 'user.dokpendukung.index',    'icon' => 'folder_open'],
                 ['label' => 'Hasil Assessment',  'route' => 'user.hasil.index',      'icon' => 'bar_chart'],
             ],

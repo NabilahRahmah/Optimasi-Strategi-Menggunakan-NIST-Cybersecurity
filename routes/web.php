@@ -57,6 +57,12 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
+// preview file bukti
+Route::middleware('auth')->group(function () {
+    Route::get('/bukti/{jawaban_id}/{index?}', [\App\Http\Controllers\BuktiController::class, 'preview'])
+        ->name('bukti.preview');
+});
+
 // ==========================================
 // GRUP SUPERADMIN
 // ==========================================
@@ -111,6 +117,7 @@ Route::middleware(['auth', 'role:admin'])
         Route::get('/assessment/{id}/edit', [AdminAssessmentController::class, 'edit'])->name('admin.assessment.edit');
         Route::put('/assessment/{id}', [AdminAssessmentController::class, 'update'])->name('admin.assessment.update');
         Route::delete('/assessment/{id}', [AdminAssessmentController::class, 'destroy'])->name('admin.assessment.destroy');
+        // Route::get('/assessment/jawaban/{jawaban_id}/preview/{index?}', [AdminAssessmentController::class, 'previewFile'])->name('admin.assessment.previewFile');
 
         // Assign user & approver
         Route::put('/assessment/{framework_id}/assign', [AdminAssessmentController::class, 'assign'])->name('admin.assessment.assign');
@@ -127,7 +134,7 @@ Route::middleware(['auth', 'role:admin'])
         // Route::get('/dokpendukung', [AdminDokpendukungController::class, 'index'])->name('admin.dokpendukung.index');
         // Route::get('/dokpendukung/create', [AdminDokpendukungController::class, 'create'])->name('admin.dokpendukung.create');
         // Route::post('/dokpendukung', [AdminDokpendukungController::class, 'store'])->name('admin.dokpendukung.store');
-
+    
         // // ← Route dengan {id} SELALU paling bawah!
         // Route::get('/dokpendukung/{id}/preview', [AdminDokpendukungController::class, 'preview'])->name('admin.dokpendukung.preview');
         // Route::get('/dokpendukung/{id}/download', [AdminDokpendukungController::class, 'download'])->name('admin.dokpendukung.download');
@@ -146,16 +153,18 @@ Route::middleware(['auth', 'role:approver'])
         // Verifikasi Assessment
         Route::get('/verifikasi', [VerifikasiController::class, 'index'])
             ->name('approver.verifikasi.index');
-        Route::get('/verifikasi/approved', [VerifikasiController::class, 'approved'])
-            ->name('approver.verifikasi.approved');
+        Route::get('/verifikasi/disetujui', [VerifikasiController::class, 'disetujui'])
+            ->name('approver.verifikasi.disetujui');
         Route::post('/verifikasi/{assessment_id}/jawaban', [VerifikasiController::class, 'saveJawaban'])
             ->name('approver.verifikasi.saveJawaban');
         Route::post('/verifikasi/{assessment}/finalisasi', [VerifikasiController::class, 'finalisasi'])
             ->name('approver.verifikasi.finalisasi');
         Route::get('/verifikasi/{assessment}', [VerifikasiController::class, 'show'])
             ->name('approver.verifikasi.show');
-        Route::post('/verifikasi/{jawaban}/item', [VerifikasiController::class, 'verifikasiItem'])
+        Route::post('/verifikasi/{jawaban:jawaban_id}/item', [VerifikasiController::class, 'verifikasiItem'])
             ->name('approver.verifikasi.item');
+        // Route::get('/verifikasi/jawaban/{jawaban_id}/preview/{index?}', [VerifikasiController::class, 'previewFile'])
+            // ->name('approver.verifikasi.previewFile');
 
         // Rekomendasi Manual
         Route::get('/rekomendasi', [\App\Http\Controllers\Approver\RekomendasiController::class, 'index'])
@@ -184,16 +193,20 @@ Route::middleware(['auth', 'role:user'])
             ->name('user.dashboard');
 
         // Self Assessment
-        Route::get('/assessment/create', [UserAssessmentController::class, 'create'])
-            ->name('assessment.create');
+        Route::get('/assessment', [UserAssessmentController::class, 'pilihFramework'])
+            ->name('user.assessment.pilihFramework');
+        Route::get('/assessment/index', [UserAssessmentController::class, 'index'])
+            ->name('user.assessment.index');
         Route::post('/assessment/store', [UserAssessmentController::class, 'store'])
-            ->name('assessment.store');
+            ->name('user.assessment.store');
         Route::post('/assessment/{assessment_id}/jawaban', [UserAssessmentController::class, 'saveJawaban'])
-            ->name('assessment.saveJawaban');
-        Route::get('/assessment/{assessment}/revisi', [UserAssessmentController::class, 'revisi'])
-            ->name('assessment.revisi');
-        Route::post('/assessment/{assessment}/revisi', [UserAssessmentController::class, 'simpanRevisi'])
-            ->name('assessment.simpanRevisi');
+            ->name('user.assessment.saveJawaban');
+        // Route::get('/assessment/{assessment}/revisi', [UserAssessmentController::class, 'revisi'])
+            // ->name('user.assessment.index');
+        // Route::post('/assessment/{assessment}/revisi', [UserAssessmentController::class, 'simpanRevisi'])
+            // ->name('user.assessment.simpanRevisi');
+        // Route::get('/assessment/jawaban/{jawaban_id}/preview/{index?}', [UserAssessmentController::class, 'previewFile'])
+            // ->name('user.assessment.previewFile');
 
         // // Dokumen Pendukung → folder user/dokpendukung
         // Route::get('/dokpendukung', [UserDokpendukungController::class, 'index'])
@@ -208,14 +221,14 @@ Route::middleware(['auth', 'role:user'])
         //     ->name('user.dokpendukung.download');
         // Route::get('dokpendukung/{id}/preview', [UserDokpendukungController::class, 'preview'])
         //     ->name('user.dokpendukung.preview');
-
+    
 
         // Hasil
         Route::get('/hasil', [UserHasilController::class, 'index'])
             ->name('user.hasil.index');
         Route::get('/hasil/{assessment}', [UserHasilController::class, 'show'])
             ->name('user.hasil.show');
-        Route::get('/hasil/{assessment}/pdf', [UserHasilController::class, 'cetakPDF'])
+        Route::post('/hasil/{assessment}/pdf', [UserHasilController::class, 'cetakPDF'])
             ->name('user.hasil.cetakPDF');
     });
 

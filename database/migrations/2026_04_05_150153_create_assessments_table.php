@@ -17,7 +17,7 @@ return new class extends Migration {
                 'draft',
                 'submitted',
                 'in_review',
-                'approved',
+                'disetujui',
                 'rejected'
             ])->default('draft');
             $table->timestamps();
