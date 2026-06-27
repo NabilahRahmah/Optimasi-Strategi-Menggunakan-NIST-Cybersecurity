@@ -297,7 +297,7 @@ class AssessmentController extends Controller
             abort(404, 'File tidak ditemukan.');
         }
 
-        $fullPath = storage_path('app/' . $paths[$index]);
+        $fullPath = storage_path('app/public/' . $paths[$index]);
 
         if (!file_exists($fullPath)) {
             abort(404, 'File tidak ditemukan di storage.');
@@ -319,6 +319,7 @@ class AssessmentController extends Controller
             'Content-Disposition' => 'inline; filename="' . $namaFile . '"',
         ]);
     }
+    
 
     // ══════════════════════════════════════
     //  ASSIGN USER & APPROVER KE FRAMEWORK

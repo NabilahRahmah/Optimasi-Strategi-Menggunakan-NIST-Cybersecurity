@@ -18,13 +18,12 @@ class HasilController extends Controller
     public function index()
     {
         $assessments = Assessment::where('user_id', auth()->id())
-            ->whereIn('status', ['submitted', 'in_review', 'disetujui'])
+            ->whereIn('status', ['submitted', 'in_review', 'disetujui', 'ditolak']) // ← tambah ditolak
             ->latest()
             ->get();
 
         return view('user.hasil.index', compact('assessments'));
     }
-
     public function show($assessment_id)
     {
         $assessment = Assessment::with('user')->findOrFail($assessment_id);
@@ -134,7 +133,7 @@ class HasilController extends Controller
             'nilai_total',
             'rataRataPerKategori',
             'skorPerDomain',
-            'radarImage'  
+            'radarImage'
         ))->setPaper('a4', 'portrait');
 
         $filename = 'Laporan-Assessment-' .
@@ -160,17 +159,17 @@ class HasilController extends Controller
                 ->whereNotNull('indeks_nilai')
                 ->avg('indeks_nilai') ?? 0;
 
-            $targetNilai = 3; 
+            $targetNilai = 3;
             $gap = round($targetNilai - $rata_rata, 2);
             $level = $this->tentukanLevel($rata_rata);
 
             Hasil::updateOrCreate(
                 ['assessment_id' => $assessment_id, 'domain_id' => $domain->domain_id],
                 [
-                'nilai_kematangan' => round($rata_rata, 2),
-                'target_nilai'     => $targetNilai,
-                'gap'              => $gap,
-                'level_kematangan' => $level,
+                    'nilai_kematangan' => round($rata_rata, 2),
+                    'target_nilai' => $targetNilai,
+                    'gap' => $gap,
+                    'level_kematangan' => $level,
                 ]
             );
         }

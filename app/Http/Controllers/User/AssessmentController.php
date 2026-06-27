@@ -84,18 +84,17 @@ class AssessmentController extends Controller
             'judul_assessment' => 'required|string|max:255',
             'scores' => 'nullable|array',
             'scores.*' => 'nullable|integer|min:0|max:5',
+            'files' => 'nullable|array',
             'files.*.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
         ]);
 
-        // UBAH INI: Izinkan akses jika statusnya draft ATAU revisi
         $assessment = Assessment::where('user_id', auth()->user()->user_id)
             ->where('assessment_id', $request->assessment_id)
-            ->whereIn('status', ['draft', 'ditolak', 'revisi'])
+            ->whereIn('status', ['draft', 'ditolak'])
             ->firstOrFail();
 
         $isDraft = $request->action === 'draft';
 
-        // Update status assessment
         $assessment->update([
             'judul_assessment' => $request->judul_assessment,
             'status' => $isDraft ? 'draft' : 'submitted',
@@ -108,26 +107,23 @@ class AssessmentController extends Controller
                     'pertanyaan_id' => $pertanyaan_id,
                 ]);
 
-                if (in_array($jawaban->status_verifikasi, ['ditolak', 'disetujui'])) {
-                    $jawaban->status_verifikasi = 'pending';
-                    $jawaban->komentar_approver = null; 
-                }
-
-                // Jika statusnya revisi, kita "buka" kunci per item
-                // Reset status verifikasi ke pending agar bisa direview ulang
+                // Reset ke pending kalau sebelumnya sudah diverif (ditolak)
                 if ($jawaban->status_verifikasi === 'ditolak') {
                     $jawaban->status_verifikasi = 'pending';
                     $jawaban->komentar_approver = null;
                 }
 
-                // --- LOGIKA FILE (PENTING) ---
-                // Jika ingin menambah file baru ke bukti yang sudah ada:
+                // ✅ FIX: append file baru ke array yang sudah ada (bukan overwrite)
                 $pathList = $jawaban->file_bukti ?? [];
                 $namaList = $jawaban->nama_file_asli ?? [];
                 $ukuranList = $jawaban->ukuran_file ?? [];
 
+                // files[pertanyaan_id] adalah array file (multiple)
                 if ($request->hasFile("files.{$pertanyaan_id}")) {
-                    $uploadedFiles = (array) $request->file("files.{$pertanyaan_id}");
+                    $uploadedFiles = $request->file("files.{$pertanyaan_id}");
+                    // Pastikan array meski single file
+                    $uploadedFiles = is_array($uploadedFiles) ? $uploadedFiles : [$uploadedFiles];
+
                     foreach ($uploadedFiles as $file) {
                         if ($file && $file->isValid()) {
                             $pathList[] = $file->store('bukti_audit', 'public');
@@ -146,7 +142,6 @@ class AssessmentController extends Controller
             }
         }
 
-        // Eksekusi SkorService jika disubmit
         if (!$isDraft) {
             try {
                 $skorService = new SkorService();
@@ -155,7 +150,8 @@ class AssessmentController extends Controller
                 \Log::warning('SkorService gagal: ' . $e->getMessage());
             }
 
-            return redirect()->route('user.dashboard')->with('success', 'Berhasil disubmit! Menunggu verifikasi ulang.');
+            return redirect()->route('user.hasil.index')
+                ->with('success', 'Berhasil disubmit! Menunggu verifikasi.');
         }
 
         return redirect()->back()->with('success', 'Draft berhasil disimpan!');
@@ -167,10 +163,16 @@ class AssessmentController extends Controller
             ->where('assessment_id', $assessment_id)
             ->firstOrFail();
 
+        if (in_array($assessment->status, ['in_review', 'disetujui'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Assessment sedang dikunci untuk direview atau sudah final.',
+            ], 403);
+        }
+
         $request->validate([
             'pertanyaan_id' => 'required|exists:pertanyaans,pertanyaan_id',
             'indeks_nilai' => 'nullable|integer|min:0|max:5',
-            'komentar_approver' => 'nullable|string|max:1000',
             'file_bukti.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
             'file_bukti' => 'nullable',
         ]);
@@ -184,10 +186,6 @@ class AssessmentController extends Controller
 
         if ($request->has('indeks_nilai')) {
             $data['indeks_nilai'] = $request->indeks_nilai;
-        }
-
-        if ($request->has('komentar_approver')) {
-            $data['komentar_approver'] = $request->komentar_approver;
         }
 
         if ($request->hasFile('file_bukti')) {
@@ -215,13 +213,16 @@ class AssessmentController extends Controller
             return response()->json(['success' => true, 'message' => 'Tidak ada perubahan']);
         }
 
-        if (in_array($jawaban->status_verifikasi, [null, 'rejected'])) {
+        if (in_array($jawaban->status_verifikasi, ['ditolak', 'disetujui', null])) {
             $data['status_verifikasi'] = 'pending';
         }
 
         $jawaban->update($data);
 
-        return response()->json(['success' => true]);
+        return response()->json([
+            'success' => true,
+            'was_approved' => $jawaban->getOriginal('status_verifikasi') === 'disetujui',
+        ]);
     }
 
     public function previewFile($jawaban_id, $index = 0)
@@ -241,7 +242,7 @@ class AssessmentController extends Controller
             abort(404, 'File tidak ditemukan.');
         }
 
-        $fullPath = storage_path('app/' . $paths[$index]);
+        $fullPath = storage_path('app/public/' . $paths[$index]);
 
         if (!file_exists($fullPath)) {
             abort(404, 'File tidak ditemukan di storage.');
@@ -264,4 +265,57 @@ class AssessmentController extends Controller
         ]);
     }
 
+    public function hapusFile(Request $request, $jawaban_id)
+    {
+        $jawaban = AssessmentJawaban::with('assessment')->findOrFail($jawaban_id);
+
+        // Guard: hanya pemilik assessment
+        abort_if(
+            $jawaban->assessment->user_id !== auth()->user()->user_id,
+            403,
+            'Akses ditolak.'
+        );
+
+        // Guard: tidak boleh hapus kalau assessment sedang direview/sudah final
+        abort_if(
+            in_array($jawaban->assessment->status, ['in_review', 'disetujui']),
+            403,
+            'Assessment sedang dikunci.'
+        );
+
+        $request->validate([
+            'index' => 'required|integer|min:0',
+        ]);
+
+        $index = (int) $request->index;
+        $pathList = $jawaban->file_bukti ?? [];
+        $namaList = $jawaban->nama_file_asli ?? [];
+        $ukuranList = $jawaban->ukuran_file ?? [];
+
+        if (!isset($pathList[$index])) {
+            return response()->json(['success' => false, 'message' => 'File tidak ditemukan.'], 404);
+        }
+
+        // Hapus file fisik dari storage
+        $filePath = storage_path('app/public/' . $pathList[$index]);
+        if (file_exists($filePath)) {
+            unlink($filePath);
+        }
+
+        // Hapus dari array (reindex)
+        array_splice($pathList, $index, 1);
+        array_splice($namaList, $index, 1);
+        array_splice($ukuranList, $index, 1);
+
+        $jawaban->update([
+            'file_bukti' => array_values($pathList),
+            'nama_file_asli' => array_values($namaList),
+            'ukuran_file' => array_values($ukuranList),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'sisa_file' => count($pathList),
+        ]);
+    }
 }

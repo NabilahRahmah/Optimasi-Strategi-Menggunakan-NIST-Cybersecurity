@@ -13,23 +13,30 @@ class VerifikasiController extends Controller
 {
     public function __construct(
         private SkorService $skor
-    ) {
-    }
+    ) {}
 
-    public function index()
+    public function index(Request $request)
     {
         $approverId = auth()->user()->user_id;
 
         $frameworkIds = \App\Models\FrameworkAssignment::where('user_id', $approverId)
             ->pluck('framework_id');
 
-        $assessments = Assessment::with('user')
-            ->whereIn('status', ['submitted', 'in_review'])
-            ->whereIn('framework_id', $frameworkIds) // ← filter ini
+        $tab = $request->get('tab', 'antrian');
+
+        $statuses = match($tab) {
+            'ditolak'   => ['ditolak'],
+            'disetujui' => ['disetujui'],
+            default     => ['submitted', 'in_review'],
+        };
+
+        $assessments = Assessment::with(['user', 'jawabans'])
+            ->whereIn('status', $statuses)
+            ->whereIn('framework_id', $frameworkIds)
             ->latest()
             ->get();
 
-        return view('approver.verifikasi.index', compact('assessments'));
+        return view('approver.verifikasi.index', compact('assessments', 'tab'));
     }
 
     public function show(Assessment $assessment)
@@ -39,12 +46,31 @@ class VerifikasiController extends Controller
             'jawabans.pertanyaan.kategori.domain',
         ]);
 
-        // Update status jadi in_review kalau masih submitted
         if ($assessment->status === 'submitted') {
             $assessment->update(['status' => 'in_review']);
         }
 
-        // Kelompokkan jawaban per domain → kategori
+        $totalJawaban = $assessment->jawabans->count();
+
+        // ✅ sudahVerif = yang sudah punya keputusan (bukan pending/null)
+        $sudahVerif = $assessment->jawabans
+            ->whereIn('status_verifikasi', ['disetujui', 'ditolak'])
+            ->count();
+
+        // ✅ masihPending = yang belum ada keputusan sama sekali
+        $masihPending = $assessment->jawabans
+            ->filter(fn($j) => is_null($j->status_verifikasi) || $j->status_verifikasi === 'pending')
+            ->count();
+
+        $adaDitolak = $assessment->jawabans
+            ->where('status_verifikasi', 'ditolak')
+            ->count();
+
+        // ✅ Selesai = tidak ada pending, bukan harus sama dengan total
+        // Ini cover skenario resubmit: jawaban yang tidak diedit tetap 'disetujui'
+        // dan tidak perlu diverif ulang
+        $semuaSelesai = $masihPending === 0 && $totalJawaban > 0;
+
         $grouped = $assessment->jawabans
             ->filter(fn($j) => $j->pertanyaan?->kategori?->domain)
             ->groupBy(fn($j) => $j->pertanyaan->kategori->domain->nama_domain)
@@ -53,7 +79,15 @@ class VerifikasiController extends Controller
                 $byDomain->groupBy(fn($j) => $j->pertanyaan->kategori->nama_kategori)
             );
 
-        return view('approver.verifikasi.show', compact('assessment', 'grouped'));
+        return view('approver.verifikasi.show', compact(
+            'assessment',
+            'grouped',
+            'semuaSelesai',
+            'totalJawaban',
+            'sudahVerif',
+            'masihPending',
+            'adaDitolak'
+        ));
     }
 
     public function disetujui(Assessment $assessment)
@@ -62,7 +96,7 @@ class VerifikasiController extends Controller
             return redirect()->route('approver.verifikasi.index')
                 ->with('error', 'Akses ditolak. Assessment ini belum selesai diverifikasi.');
         }
-        $hasil = \App\Models\Hasil::where('assessment_id', $assessment->assessment_id)->first();
+        $hasil       = \App\Models\Hasil::where('assessment_id', $assessment->assessment_id)->first();
         $nilai_total = $hasil ? $hasil->nilai_kematangan : 0;
         return view('approver.verifikasi.disetujui', compact('assessment', 'nilai_total'));
     }
@@ -70,7 +104,7 @@ class VerifikasiController extends Controller
     public function verifikasiItem(Request $request, AssessmentJawaban $jawaban)
     {
         $request->validate([
-            'status' => 'required|in:disetujui,ditolak',
+            'status'   => 'required|in:disetujui,ditolak',
             'komentar' => 'nullable|string|max:500',
         ]);
 
@@ -79,56 +113,112 @@ class VerifikasiController extends Controller
             'komentar_approver' => $request->komentar,
         ]);
 
-        $assessment = $jawaban->assessment;
+        $assessment   = $jawaban->assessment;
         $totalJawaban = $assessment->jawabans()->count();
-        $sudahVerif = $assessment->jawabans()
-            ->whereIn('status_verifikasi', ['disetujui', 'ditolak'])
-            ->count();
+
+        // ✅ FIX UTAMA: cek pending, bukan count sudah diverif vs total
+        // Skenario resubmit: jawaban tidak diedit = tetap 'disetujui' (tidak perlu verif ulang)
+        // Hanya yang user edit = reset ke 'pending' = harus diverif approver
+        $masihPending = $assessment->jawabans()
+            ->where(function ($q) {
+                $q->whereNull('status_verifikasi')
+                  ->orWhere('status_verifikasi', 'pending');
+            })->count();
 
         $adaDitolak = $assessment->jawabans()
             ->where('status_verifikasi', 'ditolak')
-            ->exists();
+            ->count();
 
-        $semuaSelesai = $totalJawaban > 0 && $sudahVerif === $totalJawaban;
+        $semuaSelesai = $masihPending === 0 && $totalJawaban > 0;
 
-        if ($semuaSelesai) {
-            try {
-                if ($adaDitolak) {
-                    $assessment->update(['status' => 'ditolak']);
-                } else {
-                    $this->skor->calculate($assessment->assessment_id);
-                    $assessment->update(['status' => 'disetujui']);
-                }
-            } catch (\Exception $e) {
-                Log::error('[Verifikasi] Gagal hitung skor', [
-                    'assessment_id' => $assessment->assessment_id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        } elseif ($adaDitolak) {
-            $assessment->update(['status' => 'ditolak']);
-        }
+        // Status assessment TIDAK berubah di sini.
+        // Tetap in_review sampai approver klik Finalisasi manual.
 
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
-                'success' => true,
-                'message' => 'Jawaban berhasil di-' . $request->status . '!',
+                'success'       => true,
+                'message'       => 'Jawaban berhasil di-' . $request->status . '!',
                 'semua_selesai' => $semuaSelesai,
+                'masih_pending' => $masihPending,
+                'ada_ditolak'   => $adaDitolak,
             ]);
         }
 
         return back()->with('success', 'Jawaban berhasil di-' . $request->status . '!');
     }
+
+    /**
+     * Dipanggil MANUAL setelah semua jawaban diverifikasi (tidak ada pending).
+     * Ada yang ditolak → assessment = ditolak, user revisi jawaban itu.
+     * Semua disetujui → hitung skor → assessment = disetujui.
+     */
+    public function finalisasi(Assessment $assessment)
+    {
+        // ✅ Guard pakai masihPending, bukan count vs total
+        $masihPending = $assessment->jawabans()
+            ->where(function ($q) {
+                $q->whereNull('status_verifikasi')
+                  ->orWhere('status_verifikasi', 'pending');
+            })->count();
+
+        if ($masihPending > 0) {
+            return response()->json([
+                'success' => false,
+                'message' => "Masih ada {$masihPending} jawaban yang belum diverifikasi.",
+            ], 422);
+        }
+
+        $adaDitolak = $assessment->jawabans()
+            ->where('status_verifikasi', 'ditolak')
+            ->exists();
+
+        try {
+            if ($adaDitolak) {
+                $assessment->update(['status' => 'ditolak']);
+
+                return response()->json([
+                    'success'  => true,
+                    'hasil'    => 'ditolak',
+                    'message'  => 'Assessment dikembalikan ke user untuk revisi.',
+                    'redirect' => route('approver.verifikasi.index'),
+                ]);
+            } else {
+                $result = $this->skor->calculate($assessment->assessment_id);
+                $assessment->update(['status' => 'disetujui']);
+
+                return response()->json([
+                    'success'     => true,
+                    'hasil'       => 'disetujui',
+                    'nilai_total' => $result['nilai_total'],
+                    'level'       => $result['level']['label'],
+                    'radar'       => $result['radar'],
+                    'gap'         => $result['gap'],
+                    'redirect'    => route('approver.verifikasi.index'),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('[Verifikasi] Gagal finalisasi', [
+                'assessment_id' => $assessment->assessment_id,
+                'error'         => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memproses finalisasi: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function saveJawaban(Request $request, $assessment_id)
     {
         $assessment = Assessment::findOrFail($assessment_id);
 
         $request->validate([
-            'pertanyaan_id' => 'required|exists:pertanyaans,pertanyaan_id',
-            'indeks_nilai' => 'nullable|integer|min:0|max:5',
+            'pertanyaan_id'     => 'required|exists:pertanyaans,pertanyaan_id',
+            'indeks_nilai'      => 'nullable|integer|min:0|max:5',
             'komentar_approver' => 'nullable|string|max:1000',
-            'file_bukti.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
-            'file_bukti' => 'nullable',
+            'file_bukti.*'      => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
+            'file_bukti'        => 'nullable',
         ]);
 
         $jawaban = AssessmentJawaban::firstOrCreate([
@@ -141,31 +231,29 @@ class VerifikasiController extends Controller
         if ($request->has('indeks_nilai')) {
             $data['indeks_nilai'] = $request->indeks_nilai;
         }
-
         if ($request->has('komentar_approver')) {
             $data['komentar_approver'] = $request->komentar_approver;
         }
 
-        // Multi-file: append ke array yang sudah ada
         if ($request->hasFile('file_bukti')) {
             $uploadedFiles = $request->file('file_bukti');
             $uploadedFiles = is_array($uploadedFiles) ? $uploadedFiles : [$uploadedFiles];
 
-            $pathList = $jawaban->file_bukti ?? [];
-            $namaList = $jawaban->nama_file_asli ?? [];
-            $ukuranList = $jawaban->ukuran_file ?? [];
+            $pathList   = $jawaban->file_bukti     ?? [];
+            $namaList   = $jawaban->nama_file_asli  ?? [];
+            $ukuranList = $jawaban->ukuran_file     ?? [];
 
             foreach ($uploadedFiles as $file) {
                 if ($file && $file->isValid()) {
-                    $pathList[] = $file->store('bukti_audit', 'public');
-                    $namaList[] = $file->getClientOriginalName();
+                    $pathList[]   = $file->store('bukti_audit', 'public');
+                    $namaList[]   = $file->getClientOriginalName();
                     $ukuranList[] = $file->getSize();
                 }
             }
 
-            $data['file_bukti'] = $pathList;
+            $data['file_bukti']     = $pathList;
             $data['nama_file_asli'] = $namaList;
-            $data['ukuran_file'] = $ukuranList;
+            $data['ukuran_file']    = $ukuranList;
         }
 
         if (empty($data)) {
@@ -185,8 +273,8 @@ class VerifikasiController extends Controller
     {
         $jawaban = AssessmentJawaban::findOrFail($jawaban_id);
 
-        $paths = $jawaban->file_bukti ?? [];
-        $namas = $jawaban->nama_file_asli ?? [];
+        $paths = $jawaban->file_bukti     ?? [];
+        $namas = $jawaban->nama_file_asli  ?? [];
 
         if (empty($paths) || !isset($paths[$index])) {
             abort(404, 'File tidak ditemukan.');
@@ -199,46 +287,19 @@ class VerifikasiController extends Controller
         }
 
         $namaFile = $namas[$index] ?? basename($paths[$index]);
-        $ext = strtolower(pathinfo($namaFile, PATHINFO_EXTENSION));
-        $mimeMap = [
-            'pdf' => 'application/pdf',
-            'jpg' => 'image/jpeg',
+        $ext      = strtolower(pathinfo($namaFile, PATHINFO_EXTENSION));
+        $mimeMap  = [
+            'pdf'  => 'application/pdf',
+            'jpg'  => 'image/jpeg',
             'jpeg' => 'image/jpeg',
-            'png' => 'image/png',
-            'doc' => 'application/msword',
+            'png'  => 'image/png',
+            'doc'  => 'application/msword',
             'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         ];
 
         return response()->file($fullPath, [
-            'Content-Type' => $mimeMap[$ext] ?? 'application/octet-stream',
+            'Content-Type'        => $mimeMap[$ext] ?? 'application/octet-stream',
             'Content-Disposition' => 'inline; filename="' . $namaFile . '"',
         ]);
-    }
-
-    public function finalisasi(Assessment $assessment)
-    {
-        try {
-            $result = $this->skor->calculate($assessment->assessment_id);
-            $assessment->update(['status' => 'disetujui']);
-
-            return response()->json([
-                'success' => true,
-                'nilai_total' => $result['nilai_total'],
-                'level' => $result['level']['label'],
-                'radar' => $result['radar'],
-                'gap' => $result['gap'],
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('[Verifikasi] Gagal finalisasi', [
-                'assessment_id' => $assessment->assessment_id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menghitung skor. ' . $e->getMessage(),
-            ], 500);
-        }
     }
 }

@@ -140,6 +140,12 @@
             <span class="material-symbols-outlined text-sm">check_circle</span>
             Selesai (<span id="count-selesai">{{ $terisi }}</span>)
         </button>
+        @if($existingJawaban->where('status_verifikasi', 'ditolak')->count() > 0)
+            <button type="button" class="status-tab inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold transition-colors border border-red-200 bg-red-50 text-red-600 hover:bg-red-100" data-status="ditolak">
+                <span class="material-symbols-outlined text-sm">cancel</span>
+            Perlu Revisi (<span id="count-ditolak">{{ $existingJawaban->where('status_verifikasi', 'ditolak')->count() }}</span>)
+            </button>
+        @endif
 
         {{-- Draft Timestamp --}}
         <div class="ml-auto flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-gray-500">
@@ -201,7 +207,8 @@
 
                     <div class="question-card rounded-xl border bg-white shadow-sm overflow-hidden transition-all hover:shadow-md"
                          data-status="{{ $sudahDiisi ? 'selesai' : 'belum' }}"
-                         data-domain="{{ $domain->kode_domain }}">
+                         data-domain="{{ $domain->kode_domain }}"
+                         data-verifikasi="{{ $statusItem ?? '' }}">
                         <div class="flex gap-6 p-6">
 
                             {{-- Konten Kiri --}}
@@ -297,36 +304,48 @@
                                     Dokumen Bukti (PDF/JPG)
                                 </p>
 
-                                @if($hasFile)
-                                    <div class="space-y-1 mb-2">
-                                @foreach($fileList as $i => $path)
-                                    <a href="{{ route('bukti.preview', ['jawaban_id' => $jawaban->jawaban_id, 'index' => $i]) }}"
-                                        target="_blank"
-                                        class="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 hover:bg-gray-100 transition-colors">
-                                        <span class="material-symbols-outlined text-red-500 text-base">description</span>
-                                        <span class="text-[11px] font-medium text-gray-700 truncate flex-1">
-                                            {{ $namaList[$i] ?? basename($path) }}
-                                        </span>
-                                    </a>
-                                @endforeach
+                                @if($hasFile && $jawaban)
+                                    <div class="space-y-1 mb-2" id="file-list-{{ $pid }}">
+                                    @foreach($fileList as $fi => $path)
+                                        <div class="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1.5 group">
+                                            <a href="{{ route('bukti.preview', ['jawaban_id' => $jawaban->jawaban_id, 'index' => $fi]) }}"
+                                                target="_blank"
+                                                class="flex items-center gap-1.5 flex-1 min-w-0 hover:text-primary transition-colors">
+                                                <span class="material-symbols-outlined text-red-500 text-base shrink-0">description</span>
+                                                <span class="text-[11px] font-medium text-gray-700 truncate">
+                                                    {{ $namaList[$fi] ?? basename($path) }}
+                                                </span>
+                                            </a>
+                                            @if(!$itemLocked)
+                                            <button type="button"
+                                                onclick="hapusFile({{ $jawaban->jawaban_id }}, {{ $fi }}, {{ $pid }}, this)"
+                                                class="opacity-0 group-hover:opacity-100 transition-opacity rounded p-0.5 text-gray-400 hover:text-red-500 hover:bg-red-50 shrink-0"
+                                                title="Hapus file ini">
+                                                <span class="material-symbols-outlined text-sm">close</span>
+                                            </button>
+                                            @endif
+                                        </div>
+                                    @endforeach
                                     </div>
                                 @endif
 
-                                {{-- Tampilkan form upload jika tidak dilock --}}
+                                {{-- Upload area: muncul kalau tidak dikunci --}}
                                 @if(!$itemLocked)
-                                <label class="flex flex-col items-center justify-center w-full h-20 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 cursor-pointer hover:border-primary hover:bg-red-50 transition-all">
+                                <label for="file-input-{{ $pid }}"
+                                    class="flex flex-col items-center justify-center w-full h-20 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 cursor-pointer hover:border-primary hover:bg-red-50 transition-all">
                                     <span class="material-symbols-outlined text-gray-400 text-xl mb-1">upload_file</span>
                                     <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider" id="filename-{{ $pid }}">
-                                        {{ $hasFile ? 'Ganti Bukti Baru' : 'Unggah Bukti' }}
+                                        {{ $hasFile ? 'Tambah Bukti Lagi' : 'Unggah Bukti' }}
                                     </span>
+                                </label>
                                 <input type="file"
+                                    id="file-input-{{ $pid }}"
                                     name="files[{{ $pid }}][]"
                                     class="hidden"
                                     accept=".pdf,.jpg,.jpeg,.png"
                                     data-pid="{{ $pid }}"
                                     multiple
                                     onchange="updateFileName(this)">
-                                </label>
                                 @endif
                             </div>
                         </div>
@@ -450,8 +469,9 @@
 
         document.querySelectorAll('.question-card').forEach(card => {
             const domainMatch = noDomainFilter || activeDomains.has(card.dataset.domain);
-            const statusMatch = activeStatus === 'all' || card.dataset.status === activeStatus;
-            card.classList.toggle('hidden', !(domainMatch && statusMatch));
+            const statusMatch = activeStatus === 'all' || activeStatus === 'ditolak' || card.dataset.status === activeStatus;
+            const ditolakMatch = activeStatus !== 'ditolak' || card.dataset.verifikasi === 'ditolak';
+            card.classList.toggle('hidden', !(domainMatch && statusMatch && ditolakMatch));
         });
 
         document.querySelectorAll('.domain-section-header').forEach(header => {
@@ -552,36 +572,142 @@
         if (footerCount) footerCount.textContent = belum;
     }
 
+    const fileMap = {};
+
     function updateFileName(input) {
-        const pid  = input.dataset.pid;
+        const pid = input.dataset.pid;
+        if (!input.files || input.files.length === 0) return;
+
+        if (!fileMap[pid]) fileMap[pid] = new DataTransfer();
+
+        // Akumulasi file, tidak overwrite
+        for (const file of input.files) {
+            fileMap[pid].items.add(file);
+        }
+
+        // Set balik ke input supaya form submit bawa semua file
+        input.files = fileMap[pid].files;
+
+        // Update label
         const span = document.getElementById(`filename-${pid}`);
-        if (input.files && input.files.length > 0 && span) {
-            span.textContent = input.files.length === 1
-                ? input.files[0].name
-                : `${input.files.length} file dipilih`;
+        if (span) {
+            const total = fileMap[pid].files.length;
+            span.textContent = total === 1 ? fileMap[pid].files[0].name : `${total} file dipilih`;
+        }
+
+        // Update preview badge
+        const previewId = `pending-files-${pid}`;
+        let previewDiv = document.getElementById(previewId);
+        if (!previewDiv) {
+            previewDiv = document.createElement('div');
+            previewDiv.id = previewId;
+            previewDiv.className = 'space-y-1 mt-1';
+            input.closest('label').insertAdjacentElement('beforebegin', previewDiv);
+        }
+        previewDiv.innerHTML = '';
+        Array.from(fileMap[pid].files).forEach(file => {
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1';
+            row.innerHTML = `
+                <span class="material-symbols-outlined text-amber-500 text-base shrink-0">draft</span>
+                <span class="text-[11px] font-medium text-gray-700 truncate flex-1">${file.name}</span>
+                <span class="text-[10px] text-amber-500 shrink-0">baru</span>`;
+            previewDiv.appendChild(row);
+        });
+        }
+
+    async function hapusFile(jawabanId, index, pid, btn) {
+        if (!confirm('Yakin ingin menghapus file ini?')) return;
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+        btn.disabled = true;
+
+        try {
+            const res = await fetch(`/user/assessment/jawaban/${jawabanId}/file`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ index }),
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+                // Hapus baris file dari DOM tanpa reload
+                btn.closest('div.flex.items-center').remove();
+
+                // Kalau tidak ada sisa file, hapus container & update label upload
+                if (data.sisa_file === 0) {
+                    const fileList = document.getElementById(`file-list-${pid}`);
+                    if (fileList) fileList.remove();
+                    const filenameSpan = document.getElementById(`filename-${pid}`);
+                    if (filenameSpan) filenameSpan.textContent = 'Unggah Bukti';
+                }
+            } else {
+                alert('Gagal menghapus file: ' + (data.message ?? 'Unknown error'));
+                btn.disabled = false;
+            }
+        } catch (e) {
+            alert('Terjadi kesalahan. Coba lagi.');
+            btn.disabled = false;
+        }
+    }
+
+    async function submitForm(isDraft) {
+        const form = document.getElementById('assessmentForm');
+        const fd   = new FormData(form);
+
+        // Tambah semua file terakumulasi dari fileMap
+        Object.entries(fileMap).forEach(([pid, dt]) => {
+            fd.delete(`files[${pid}][]`);
+            for (const file of dt.files) {
+                fd.append(`files[${pid}][]`, file);
+            }
+        });
+
+        fd.set('action', isDraft ? 'draft' : 'submit');
+
+        const btn = isDraft
+            ? document.getElementById('btnDraft')
+            : document.getElementById('btnSubmit');
+        if (btn) { btn.disabled = true; btn.textContent = 'Menyimpan...'; }
+
+        try {
+            const res = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                },
+                body: fd,
+            });
+
+            if (res.redirected) {
+                window.location.href = res.url;
+            } else {
+                window.location.reload();
+            }
+        } catch (e) {
+            alert('Terjadi kesalahan. Coba lagi.');
+            if (btn) { btn.disabled = false; btn.textContent = isDraft ? 'SIMPAN SEBAGAI DRAFT' : 'SUBMIT ASSESSMENT'; }
         }
     }
 
     document.getElementById('btnDraft')?.addEventListener('click', () => {
-        const inp   = document.createElement('input');
-        inp.type    = 'hidden';
-        inp.name    = 'action';
-        inp.value   = 'draft';
-        document.getElementById('assessmentForm').appendChild(inp);
-        document.getElementById('assessmentForm').submit();
+        submitForm(true);
     });
 
     document.getElementById('btnSubmit')?.addEventListener('click', () => {
         const scores   = document.querySelectorAll('[name^="scores["]');
         const adaDiisi = Array.from(scores).some(i => parseInt(i.value) > 0);
-
         if (!adaDiisi) {
             alert('Harap isi minimal satu maturity level sebelum submit!');
             return;
         }
-
         if (confirm('Yakin ingin submit assessment?\nSetelah disubmit, form akan dikunci untuk direview oleh Approver.')) {
-            document.getElementById('assessmentForm').submit();
+            submitForm(false);
         }
     });
 </script>

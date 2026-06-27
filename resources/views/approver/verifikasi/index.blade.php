@@ -14,19 +14,26 @@
         </div>
     </div>
 
-    {{-- Tab navigasi --}}
+    {{-- Tab navigasi (3 tab) --}}
     <div class="flex gap-2 border-b border-gray-200">
-        <a href="{{ route('approver.verifikasi.index') }}"
+        <a href="{{ route('approver.verifikasi.index', ['tab' => 'antrian']) }}"
            class="px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition
-               {{ ($activeTab ?? 'antrian') === 'antrian'
+               {{ ($tab ?? 'antrian') === 'antrian'
                    ? 'border-primary text-primary bg-primary/5'
                    : 'border-transparent text-gray-500 hover:text-gray-700' }}">
             ⏳ Antrian
         </a>
-        <a href="{{ route('approver.verifikasi.disetujui') }}"
+        <a href="{{ route('approver.verifikasi.index', ['tab' => 'ditolak']) }}"
            class="px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition
-               {{ ($activeTab ?? '') === 'disetujui'
-                   ? 'border-primary text-primary bg-primary/5'
+               {{ ($tab ?? '') === 'ditolak'
+                   ? 'border-red-500 text-red-600 bg-red-50'
+                   : 'border-transparent text-gray-500 hover:text-gray-700' }}">
+            ❌ Ditolak
+        </a>
+        <a href="{{ route('approver.verifikasi.index', ['tab' => 'disetujui']) }}"
+           class="px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition
+               {{ ($tab ?? '') === 'disetujui'
+                   ? 'border-green-500 text-green-600 bg-green-50'
                    : 'border-transparent text-gray-500 hover:text-gray-700' }}">
             ✅ Selesai Diverifikasi
         </a>
@@ -35,6 +42,12 @@
     @if(session('success'))
         <div class="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-800">
             ✅ {{ session('success') }}
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            ❌ {{ session('error') }}
         </div>
     @endif
 
@@ -56,6 +69,7 @@
                         $total     = $assessment->jawabans->count();
                         $disetujui = $assessment->jawabans->where('status_verifikasi', 'disetujui')->count();
                         $ditolak   = $assessment->jawabans->where('status_verifikasi', 'ditolak')->count();
+                        $direvisi  = $assessment->jawabans->whereNotNull('direvisi_at')->count();
                         $pct       = $total > 0 ? round((($disetujui + $ditolak) / $total) * 100) : 0;
                     @endphp
                     <tr class="hover:bg-muted/30 transition-colors">
@@ -63,7 +77,15 @@
                             <p class="font-semibold text-foreground">{{ $assessment->user->name ?? '-' }}</p>
                             <p class="text-xs text-muted-foreground">{{ $assessment->user->email ?? '' }}</p>
                         </td>
-                        <td class="px-6 py-4 text-foreground">{{ $assessment->judul_assessment }}</td>
+                        <td class="px-6 py-4 text-foreground">
+                            {{ $assessment->judul_assessment }}
+                            {{-- Badge "Ada Revisi" kalau tab ditolak dan user sudah merevisi --}}
+                            @if(($tab ?? '') === 'ditolak' && $direvisi > 0)
+                                <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                                    🔄 {{ $direvisi }} direvisi
+                                </span>
+                            @endif
+                        </td>
                         <td class="px-6 py-4 text-muted-foreground text-xs">
                             {{ $assessment->updated_at->format('d M Y, H:i') }}
                         </td>
@@ -73,7 +95,9 @@
                             @elseif($assessment->status === 'in_review')
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">Sedang Direview</span>
                             @elseif($assessment->status === 'disetujui')
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">✓ disetujui</span>
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">✓ Disetujui</span>
+                            @elseif($assessment->status === 'ditolak')
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">✗ Ditolak</span>
                             @endif
                         </td>
                         <td class="px-6 py-4">
@@ -91,7 +115,13 @@
                             <a href="{{ route('approver.verifikasi.show', $assessment->assessment_id) }}"
                                class="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-primary hover:bg-red-800 px-3 py-1.5 rounded-lg transition">
                                 <span class="material-symbols-outlined text-sm">rate_review</span>
-                                {{ $assessment->status === 'disetujui' ? 'Lihat Detail' : 'Review' }}
+                                @if($assessment->status === 'disetujui')
+                                    Lihat Detail
+                                @elseif($assessment->status === 'ditolak')
+                                    Review Revisi
+                                @else
+                                    Review
+                                @endif
                             </a>
                         </td>
                     </tr>

@@ -23,6 +23,7 @@ class AssessmentJawaban extends Model
         'ukuran_file',
         'status_verifikasi',
         'komentar_approver',
+        'direvisi_at',
     ];
 
     protected $casts = [
@@ -30,6 +31,7 @@ class AssessmentJawaban extends Model
         'ukuran_file' => 'array',
         'file_bukti' => 'array',
         'nama_file_asli' => 'array',
+        'direvisi_at'   => 'datetime',
     ];
 
     public function assessment(): BelongsTo

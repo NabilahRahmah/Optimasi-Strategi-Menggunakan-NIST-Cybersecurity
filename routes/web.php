@@ -201,6 +201,8 @@ Route::middleware(['auth', 'role:user'])
             ->name('user.assessment.store');
         Route::post('/assessment/{assessment_id}/jawaban', [UserAssessmentController::class, 'saveJawaban'])
             ->name('user.assessment.saveJawaban');
+        Route::delete('/assessment/jawaban/{jawaban_id}/file', [UserAssessmentController::class, 'hapusFile'])
+            ->name('user.assessment.hapusFile');    
         // Route::get('/assessment/{assessment}/revisi', [UserAssessmentController::class, 'revisi'])
             // ->name('user.assessment.index');
         // Route::post('/assessment/{assessment}/revisi', [UserAssessmentController::class, 'simpanRevisi'])
