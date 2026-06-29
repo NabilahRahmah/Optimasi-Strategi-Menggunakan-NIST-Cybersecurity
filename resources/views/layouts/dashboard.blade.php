@@ -160,11 +160,6 @@
                     id="sidebarToggle">
                     <span class="material-symbols-outlined">menu</span>
                 </button>
-                <div class="hidden md:flex items-center bg-gray-100 rounded-full px-4 py-1.5 gap-2">
-                    <span class="material-symbols-outlined text-gray-500 text-sm">search</span>
-                    <input class="bg-transparent border-none focus:ring-0 text-sm w-48 font-medium outline-none"
-                        placeholder="Cari kriteria audit..." type="text"/>
-                </div>
             </div>
  
             <div class="flex items-center gap-4">

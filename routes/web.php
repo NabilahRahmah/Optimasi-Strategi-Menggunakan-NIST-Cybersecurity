@@ -11,18 +11,14 @@ use App\Http\Controllers\SuperAdmin\UserController as SuperAdminUserController;
 
 //Admin
 use App\Http\Controllers\Admin\DashboardController as AdminDashboard;
-// use App\Http\Controllers\Admin\DokpendukungController as AdminDokpendukungController;
 use App\Http\Controllers\Admin\AssessmentController as AdminAssessmentController;
 
 
 //Approver
 use App\Http\Controllers\Approver\DashboardController as ApproverDashboard;
 use App\Http\Controllers\Approver\VerifikasiController;
-// use App\Http\Controllers\Approver\DokpendukungController as ApproverDokpendukungController;
-
 //User
 use App\Http\Controllers\User\DashboardController as UserDashboard;
-// use App\Http\Controllers\User\DokpendukungController as UserDokpendukungController;
 use App\Http\Controllers\User\HasilController as UserHasilController;
 use App\Http\Controllers\User\AssessmentController as UserAssessmentController;
 
@@ -55,6 +51,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
 });
 
 // preview file bukti
@@ -96,11 +93,7 @@ Route::middleware(['auth', 'role:admin_super'])
         Route::delete('/framework/{id}/domains/{domainId}', [SuperAdminFrameworkController::class, 'destroyDomain'])
             ->name('superadmin.frameworks.domains.destroy');
     });
-// Route::middleware(['auth', 'role:admin_super'])->prefix('superadmin')->name('superadmin.')->group(function () {
-//     Route::get('/dashboard', [SuperAdminDashboard::class, 'index'])->name('dashboard');
-//     Route::resource('framework', \App\Http\Controllers\SuperAdmin\FrameworkController::class);
-//     Route::resource('users', \App\Http\Controllers\SuperAdmin\UserController::class);
-// });
+
 
 // ==========================================
 // GRUP ADMIN
@@ -130,15 +123,6 @@ Route::middleware(['auth', 'role:admin'])
         Route::delete('/assessment/pertanyaan/{id}', [AdminAssessmentController::class, 'destroyPertanyaan'])->name('admin.pertanyaan.destroy');
         Route::post('/assessment/{framework_id}/jawaban', [AdminAssessmentController::class, 'saveJawaban'])->name('admin.assessment.saveJawaban');
 
-        // // Dokumen Pendukung → folder admin/dokpendukung
-        // Route::get('/dokpendukung', [AdminDokpendukungController::class, 'index'])->name('admin.dokpendukung.index');
-        // Route::get('/dokpendukung/create', [AdminDokpendukungController::class, 'create'])->name('admin.dokpendukung.create');
-        // Route::post('/dokpendukung', [AdminDokpendukungController::class, 'store'])->name('admin.dokpendukung.store');
-    
-        // // ← Route dengan {id} SELALU paling bawah!
-        // Route::get('/dokpendukung/{id}/preview', [AdminDokpendukungController::class, 'preview'])->name('admin.dokpendukung.preview');
-        // Route::get('/dokpendukung/{id}/download', [AdminDokpendukungController::class, 'download'])->name('admin.dokpendukung.download');
-        // Route::delete('/dokpendukung/{id}', [AdminDokpendukungController::class, 'destroy'])->name('admin.dokpendukung.destroy');
     });
 
 // ==========================================
@@ -163,8 +147,6 @@ Route::middleware(['auth', 'role:approver'])
             ->name('approver.verifikasi.show');
         Route::post('/verifikasi/{jawaban:jawaban_id}/item', [VerifikasiController::class, 'verifikasiItem'])
             ->name('approver.verifikasi.item');
-        // Route::get('/verifikasi/jawaban/{jawaban_id}/preview/{index?}', [VerifikasiController::class, 'previewFile'])
-            // ->name('approver.verifikasi.previewFile');
 
         // Rekomendasi Manual
         Route::get('/rekomendasi', [\App\Http\Controllers\Approver\RekomendasiController::class, 'index'])
@@ -203,26 +185,6 @@ Route::middleware(['auth', 'role:user'])
             ->name('user.assessment.saveJawaban');
         Route::delete('/assessment/jawaban/{jawaban_id}/file', [UserAssessmentController::class, 'hapusFile'])
             ->name('user.assessment.hapusFile');    
-        // Route::get('/assessment/{assessment}/revisi', [UserAssessmentController::class, 'revisi'])
-            // ->name('user.assessment.index');
-        // Route::post('/assessment/{assessment}/revisi', [UserAssessmentController::class, 'simpanRevisi'])
-            // ->name('user.assessment.simpanRevisi');
-        // Route::get('/assessment/jawaban/{jawaban_id}/preview/{index?}', [UserAssessmentController::class, 'previewFile'])
-            // ->name('user.assessment.previewFile');
-
-        // // Dokumen Pendukung → folder user/dokpendukung
-        // Route::get('/dokpendukung', [UserDokpendukungController::class, 'index'])
-        //     ->name('user.dokpendukung.index');
-        // Route::get('/dokpendukung/create', [UserDokpendukungController::class, 'create'])
-        //     ->name('user.dokpendukung.create');
-        // Route::post('/dokpendukung', [UserDokpendukungController::class, 'store'])
-        //     ->name('user.dokpendukung.store');
-        // Route::delete('/dokpendukung/{id}', [UserDokpendukungController::class, 'destroy'])
-        //     ->name('user.dokpendukung.destroy');
-        // Route::get('/dokpendukung/{id}/download', [UserDokpendukungController::class, 'download'])
-        //     ->name('user.dokpendukung.download');
-        // Route::get('dokpendukung/{id}/preview', [UserDokpendukungController::class, 'preview'])
-        //     ->name('user.dokpendukung.preview');
     
 
         // Hasil

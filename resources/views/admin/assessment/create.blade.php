@@ -33,39 +33,49 @@
                         <label class="text-sm font-medium leading-none">Domain <span
                                 class="text-destructive">*</span></label>
 
-                        {{-- Hidden select asli, tetap dikirim ke server --}}
-                        <select name="domain_id" id="domain-select" class="hidden">
-                            <option value="">-- Pilih Domain --</option>
-                            @foreach($domains as $domain)
-                                <option value="{{ $domain->domain_id }}" {{ old('domain_id') == $domain->domain_id ? 'selected' : '' }}>
-                                    {{ $domain->kode_domain }} — {{ $domain->nama_domain }}
-                                </option>
-                            @endforeach
-                        </select>
-
-                        {{-- Custom dropdown --}}
-                        <div class="relative" id="domain-dropdown">
-                            <button type="button" id="domain-dropdown-btn"
-                                class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring @error('domain_id') border-destructive @enderror">
-                                <span id="domain-dropdown-label" class="text-muted-foreground">-- Pilih Domain --</span>
-                                <svg class="h-4 w-4 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
-                                    <path d="M6 9l6 6 6-6" />
-                                </svg>
-                            </button>
-
-                            <div id="domain-dropdown-panel"
-                                class="hidden absolute z-50 mt-1 w-full rounded-md border border-input bg-white shadow-lg">
-                                <div class="p-2 border-b bg-white">
-                                    <input type="text" id="domain-search"
-                                        placeholder="Cari domain..."
-                                        class="w-full h-8 rounded-md border border-input bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-                                </div>
-                                <ul id="domain-options" class="max-h-60 overflow-y-auto py-1 text-sm bg-white">
-                                {{-- diisi via JS --}}
-                                </ul>
+                        @if($domainId)
+                            @php
+                                $selectedDomain = collect($domains)->firstWhere('domain_id', $domainId);
+                            @endphp
+                            <input type="hidden" name="domain_id" id="domain-select" value="{{ $domainId }}">
+                            <div class="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm text-muted-foreground cursor-not-allowed opacity-80">
+                                {{ $selectedDomain ? $selectedDomain->kode_domain . ' — ' . $selectedDomain->nama_domain : 'Domain Terpilih' }}
                             </div>
-                        </div>
+                        @else
+                            {{-- Hidden select asli, tetap dikirim ke server --}}
+                            <select name="domain_id" id="domain-select" class="hidden">
+                                <option value="">-- Pilih Domain --</option>
+                                @foreach($domains as $domain)
+                                    <option value="{{ $domain->domain_id }}" {{ old('domain_id') == $domain->domain_id ? 'selected' : '' }}>
+                                        {{ $domain->kode_domain }} — {{ $domain->nama_domain }}
+                                    </option>
+                                @endforeach
+                            </select>
+
+                            {{-- Custom dropdown --}}
+                            <div class="relative" id="domain-dropdown">
+                                <button type="button" id="domain-dropdown-btn"
+                                    class="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring @error('domain_id') border-destructive @enderror">
+                                    <span id="domain-dropdown-label" class="text-muted-foreground">-- Pilih Domain --</span>
+                                    <svg class="h-4 w-4 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path d="M6 9l6 6 6-6" />
+                                    </svg>
+                                </button>
+
+                                <div id="domain-dropdown-panel"
+                                    class="hidden absolute z-50 mt-1 w-full rounded-md border border-input bg-white shadow-lg">
+                                    <div class="p-2 border-b bg-white">
+                                        <input type="text" id="domain-search"
+                                            placeholder="Cari domain..."
+                                            class="w-full h-8 rounded-md border border-input bg-white px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
+                                    </div>
+                                    <ul id="domain-options" class="max-h-60 overflow-y-auto py-1 text-sm bg-white">
+                                    {{-- diisi via JS --}}
+                                    </ul>
+                                </div>
+                            </div>
+                        @endif
 
                         @error('domain_id')<p class="text-xs text-destructive">{{ $message }}</p>@enderror
                     </div>

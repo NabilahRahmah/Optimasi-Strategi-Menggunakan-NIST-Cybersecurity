@@ -230,7 +230,7 @@
                                             </span>
                                         @endif
                                     </span>
-                                     @if($statusItem)
+                                     @if($statusItem && $assessment->status !== 'draft')
                                         @php
                                             $svMap = [
                                                 'pending'   => ['bg-amber-100 text-amber-700', 'schedule', 'Menunggu Verifikasi'],
@@ -602,16 +602,21 @@
             previewDiv = document.createElement('div');
             previewDiv.id = previewId;
             previewDiv.className = 'space-y-1 mt-1';
-            input.closest('label').insertAdjacentElement('beforebegin', previewDiv);
+            const label = document.querySelector(`label[for="file-input-${pid}"]`);
+            if (label) label.insertAdjacentElement('beforebegin', previewDiv);
         }
         previewDiv.innerHTML = '';
-        Array.from(fileMap[pid].files).forEach(file => {
+        Array.from(fileMap[pid].files).forEach((file, idx) => {
             const row = document.createElement('div');
-            row.className = 'flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1';
+            row.className = 'flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-2 py-1 group';
             row.innerHTML = `
-                <span class="material-symbols-outlined text-amber-500 text-base shrink-0">draft</span>
-                <span class="text-[11px] font-medium text-gray-700 truncate flex-1">${file.name}</span>
-                <span class="text-[10px] text-amber-500 shrink-0">baru</span>`;
+                <span class="material-symbols-outlined text-green-500 text-base shrink-0">check_circle</span>
+                <span class="text-[11px] font-medium text-green-800 truncate flex-1">${file.name}</span>
+                <span class="text-[10px] text-green-600 font-bold shrink-0">Berhasil ditambahkan</span>
+                <button type="button" onclick="hapusPending(${pid}, ${idx})"
+                    class="opacity-0 group-hover:opacity-100 transition-opacity text-green-600 hover:text-red-500 hover:bg-red-50 rounded p-0.5 shrink-0 ml-1" title="Batal">
+                    <span class="material-symbols-outlined text-sm">close</span>
+                </button>`;
             previewDiv.appendChild(row);
         });
         }
@@ -653,6 +658,32 @@
         } catch (e) {
             alert('Terjadi kesalahan. Coba lagi.');
             btn.disabled = false;
+        }
+    }
+
+    function hapusPending(pid, idx) {
+        if (!fileMap[pid]) return;
+        const dt = new DataTransfer();
+        Array.from(fileMap[pid].files).forEach((f, i) => {
+            if (i !== idx) dt.items.add(f);
+        });
+        fileMap[pid] = dt;
+
+    const input = document.getElementById(`file-input-${pid}`);
+        if (input) input.files = dt.files;
+
+        if (dt.files.length === 0) {
+            const previewDiv = document.getElementById(`pending-files-${pid}`);
+            if (previewDiv) previewDiv.remove();
+            const span = document.getElementById(`filename-${pid}`);
+         if (span) span.textContent = document.getElementById(`file-list-${pid}`) ? 'Tambah Bukti Lagi' : 'Unggah Bukti';
+        } else {
+            // Re-render ulang preview
+            const previewDiv = document.getElementById(`pending-files-${pid}`);
+            if (previewDiv) previewDiv.remove();
+            const fakeInput = { dataset: { pid }, files: dt.files };
+            updateFileName(fakeInput);
+            
         }
     }
 

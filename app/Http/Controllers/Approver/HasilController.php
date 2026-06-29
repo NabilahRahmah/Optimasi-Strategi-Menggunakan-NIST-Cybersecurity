@@ -12,8 +12,12 @@ class HasilController extends Controller
 {
     public function index()
     {
+        $approverId = auth()->user()->user_id;
+        $frameworkIds = \App\Models\FrameworkAssignment::where('user_id', $approverId)->pluck('framework_id');
+
         $assessments = Assessment::with('user')
             ->where('status', 'disetujui')
+            ->whereIn('framework_id', $frameworkIds)
             ->latest()
             ->get();
 
@@ -22,6 +26,8 @@ class HasilController extends Controller
 
     public function show(Assessment $assessment)
     {
+        abort_if(!auth()->user()->isAssignedTo($assessment->framework_id), 403, 'Akses ditolak.');
+
         $hasils = Hasil::with('domain')
             ->where('assessment_id', $assessment->assessment_id)
             ->get();

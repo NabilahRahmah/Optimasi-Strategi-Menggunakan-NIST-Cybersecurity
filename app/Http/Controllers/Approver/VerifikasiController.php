@@ -41,6 +41,8 @@ class VerifikasiController extends Controller
 
     public function show(Assessment $assessment)
     {
+        abort_if(!auth()->user()->isAssignedTo($assessment->framework_id), 403, 'Akses ditolak.');
+
         $assessment->load([
             'user',
             'jawabans.pertanyaan.kategori.domain',
@@ -92,6 +94,8 @@ class VerifikasiController extends Controller
 
     public function disetujui(Assessment $assessment)
     {
+        abort_if(!auth()->user()->isAssignedTo($assessment->framework_id), 403, 'Akses ditolak.');
+
         if ($assessment->status !== 'disetujui') {
             return redirect()->route('approver.verifikasi.index')
                 ->with('error', 'Akses ditolak. Assessment ini belum selesai diverifikasi.');
@@ -154,6 +158,8 @@ class VerifikasiController extends Controller
      */
     public function finalisasi(Assessment $assessment)
     {
+        abort_if(!auth()->user()->isAssignedTo($assessment->framework_id), 403, 'Akses ditolak.');
+
         // ✅ Guard pakai masihPending, bukan count vs total
         $masihPending = $assessment->jawabans()
             ->where(function ($q) {

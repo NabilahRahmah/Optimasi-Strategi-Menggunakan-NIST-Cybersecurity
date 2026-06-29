@@ -36,15 +36,16 @@ class Assessment extends Model
         return $query->where('status', 'in_review');
     }
 
-    // ── Relasi ──────────────────────────────
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'user_id', 'user_id');
-    }
+    // ── Relasi ──────────────────────────────    
 
     public function framework(): BelongsTo
     {
         return $this->belongsTo(Framework::class, 'framework_id', 'framework_id');
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'user_id', 'user_id');
     }
 
     public function jawabans(): HasMany
@@ -52,7 +53,6 @@ class Assessment extends Model
         return $this->hasMany(AssessmentJawaban::class, 'assessment_id', 'assessment_id');
     }
 
-    // fix: hapus duplikat — pakai hasMany saja karena hasil per domain (banyak)
     public function hasils(): HasMany
     {
         return $this->hasMany(Hasil::class, 'assessment_id', 'assessment_id');
@@ -63,10 +63,6 @@ class Assessment extends Model
         return $this->hasMany(Rekomendasi::class, 'assessment_id', 'assessment_id');
     }
 
-    public function dokumenPendukungs(): HasMany
-    {
-        return $this->hasMany(DokumenPendukung::class, 'assessment_id', 'assessment_id');
-    }
 
     // ── Helpers ─────────────────────────────
     public function isComplete(): bool

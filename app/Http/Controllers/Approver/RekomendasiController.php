@@ -13,8 +13,12 @@ class RekomendasiController extends Controller
     // List semua assessment disetujui yang bisa dikasih rekomendasi manual
     public function index()
     {
+        $approverId = auth()->user()->user_id;
+        $frameworkIds = \App\Models\FrameworkAssignment::where('user_id', $approverId)->pluck('framework_id');
+
         $assessments = Assessment::with(['user', 'rekomendasis'])
             ->where('status', 'disetujui')
+            ->whereIn('framework_id', $frameworkIds)
             ->latest()
             ->get();
 
@@ -24,6 +28,8 @@ class RekomendasiController extends Controller
     // Form tambah rekomendasi manual untuk satu assessment
     public function create(Assessment $assessment)
     {
+        abort_if(!auth()->user()->isAssignedTo($assessment->framework_id), 403, 'Akses ditolak.');
+
         $domains = Domain::where('framework_id', $assessment->framework_id)
             ->orderBy('kode_domain')
             ->get();
@@ -44,6 +50,8 @@ class RekomendasiController extends Controller
     // Simpan rekomendasi manual dari approver
     public function store(Request $request, Assessment $assessment)
     {
+        abort_if(!auth()->user()->isAssignedTo($assessment->framework_id), 403, 'Akses ditolak.');
+
         $request->validate([
             'domain_id'           => 'required|exists:domains,domain_id',
             'deskripsi_perbaikan' => 'required|string|max:1000',

@@ -17,16 +17,24 @@ class HasilController extends Controller
 {
     public function index()
     {
-        $assessments = Assessment::where('user_id', auth()->id())
-            ->whereIn('status', ['submitted', 'in_review', 'disetujui', 'ditolak']) // ← tambah ditolak
+        // ✅ FIX: Ganti query pakai framework_id biar sesuai konsep kerja tim
+        $frameworkIds = auth()->user()->assignedFrameworks()->pluck('frameworks.framework_id')->toArray();
+        
+        $assessments = Assessment::whereIn('framework_id', $frameworkIds)
+            ->whereIn('status', ['submitted', 'in_review', 'disetujui', 'ditolak'])
             ->latest()
             ->get();
 
         return view('user.hasil.index', compact('assessments'));
     }
+    
     public function show($assessment_id)
     {
-        $assessment = Assessment::with('user')->findOrFail($assessment_id);
+        // ✅ FIX: Hapus ->with('user') karena kolomnya udah dihilangin
+        $assessment = Assessment::findOrFail($assessment_id);
+        
+        // Guard: Pastikan dia di-assign ke framework assessment ini
+        abort_if(!auth()->user()->isAssignedTo($assessment->framework_id), 403, 'Akses ditolak.');
 
         $this->hitungDanSimpan($assessment_id, $assessment->framework_id);
 
@@ -44,7 +52,6 @@ class HasilController extends Controller
         $chart_labels = $hasils->map(fn($h) => $h->domain->nama_domain);
         $chart_values = $hasils->map(fn($h) => $h->nilai_kematangan);
 
-        // Hitung per kategori via pertanyaan
         $rataRataPerKategori = DB::table('assessment_jawabans')
             ->join('pertanyaans', 'assessment_jawabans.pertanyaan_id', '=', 'pertanyaans.pertanyaan_id')
             ->join('kategoris', 'pertanyaans.kategori_id', '=', 'kategoris.kategori_id')
@@ -63,7 +70,6 @@ class HasilController extends Controller
             ->orderBy('kategoris.kode_kategori')
             ->get();
 
-        // Skor per domain untuk view user (format array kode => nilai)
         $skorPerDomain = $hasils->mapWithKeys(fn($h) => [
             $h->domain->kode_domain => $h->nilai_kematangan
         ])->toArray();
@@ -82,7 +88,10 @@ class HasilController extends Controller
 
     public function cetakPDF(Request $request, $assessment_id)
     {
-        $assessment = Assessment::with('user')->findOrFail($assessment_id);
+        // ✅ FIX: Hapus ->with('user')
+        $assessment = Assessment::findOrFail($assessment_id);
+        
+        abort_if(!auth()->user()->isAssignedTo($assessment->framework_id), 403, 'Akses ditolak.');
 
         $hasils = Hasil::with('domain')
             ->where('assessment_id', $assessment_id)
@@ -150,7 +159,6 @@ class HasilController extends Controller
             ->get();
 
         foreach ($domains as $domain) {
-            // Ambil semua pertanyaan_id dari kategori yang ada di domain ini
             $pertanyaan_ids = $domain->kategoris
                 ->flatMap(fn($k) => $k->pertanyaans->pluck('pertanyaan_id'));
 
@@ -183,7 +191,6 @@ class HasilController extends Controller
             ->where('sumber', 'otomatis')
             ->delete();
 
-        // Ambil jawaban dengan nilai rendah, via pertanyaan → kategori → domain
         $jawabans = AssessmentJawaban::with('pertanyaan.kategori.domain')
             ->where('assessment_id', $assessment_id)
             ->whereNotNull('indeks_nilai')

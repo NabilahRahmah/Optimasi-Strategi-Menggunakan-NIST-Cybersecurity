@@ -664,7 +664,7 @@
                 </div>
 
                 {{-- Remember + Forgot --}}
-                <div class="row">
+                <!-- <div class="row">
                     <label class="remember">
                         <input type="checkbox" name="remember" id="remember_me">
                         <span>Ingat saya</span>
@@ -672,7 +672,7 @@
                     @if(Route::has('password.request'))
                         <a href="{{ route('password.request') }}" class="forgot">Lupa password?</a>
                     @endif
-                </div>
+                </div> -->
 
                 {{-- Submit --}}
                 <button type="submit" class="btn-login">

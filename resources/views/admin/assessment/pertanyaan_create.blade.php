@@ -35,16 +35,26 @@
 
                     <div>
                         <label class="block text-sm font-semibold text-foreground mb-1.5">Kategori <span class="text-red-500">*</span></label>
-                        <select name="kategori_id" required
-                            class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 @error('kategori_id') border-red-400 @enderror">
-                            <option value="">-- Pilih Kategori --</option>
-                            @foreach($kategoris as $kat)
-                                <option value="{{ $kat->kategori_id }}"
-                                    {{ (old('kategori_id', $selectedId) == $kat->kategori_id) ? 'selected' : '' }}>
-                                    [{{ $kat->kode_kategori }}] {{ $kat->nama_kategori }}
-                                </option>
-                            @endforeach
-                        </select>
+                        @if($selectedId)
+                            @php
+                                $selectedKat = collect($kategoris)->firstWhere('kategori_id', $selectedId);
+                            @endphp
+                            <input type="hidden" name="kategori_id" value="{{ $selectedId }}">
+                            <div class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-gray-100 text-gray-500 cursor-not-allowed">
+                                {{ $selectedKat ? '[' . $selectedKat->kode_kategori . '] ' . $selectedKat->nama_kategori : 'Kategori Terpilih' }}
+                            </div>
+                        @else
+                            <select name="kategori_id" required
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 @error('kategori_id') border-red-400 @enderror">
+                                <option value="">-- Pilih Kategori --</option>
+                                @foreach($kategoris as $kat)
+                                    <option value="{{ $kat->kategori_id }}"
+                                        {{ (old('kategori_id') == $kat->kategori_id) ? 'selected' : '' }}>
+                                        [{{ $kat->kode_kategori }}] {{ $kat->nama_kategori }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        @endif
                         @error('kategori_id')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
                     </div>
 

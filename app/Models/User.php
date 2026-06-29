@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -18,7 +19,9 @@ class User extends Authenticatable
         'email',
         'password',
         'username',
-        'role',      // ← tambah ini
+        'nik',
+        'role',     
+        'phone',
     ];
 
     protected $hidden = [
@@ -30,7 +33,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            'password'          => 'hashed',
+            'password' => 'hashed',
         ];
     }
 
@@ -61,21 +64,28 @@ class User extends Authenticatable
         return $this->hasMany(Assessment::class, 'user_id', 'user_id');
     }
 
-     public function assignedFrameworks(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    public function jawabans(): HasMany
+    {
+        return $this->hasMany(AssessmentJawaban::class, 'user_id', 'user_id');
+    }
+
+    public function assignedFrameworks(): BelongsToMany
     {
         return $this->belongsToMany(
-            \App\Models\Framework::class,
-            'framework_assignments',
-            'user_id',
-            'framework_id',
-            'user_id',
-            'framework_id'
-        )->withTimestamps();
+            Framework::class, 
+            'framework_assignments', 
+            'user_id',               
+            'framework_id'           
+        );
     }
- 
-    // Helper: cek apakah user di-assign ke framework tertentu
-    public function isAssignedTo(int $frameworkId): bool
+
+    /**
+     * Helper untuk mengecek apakah user punya akses ke framework tertentu
+     */
+    public function isAssignedTo($frameworkId): bool
     {
-        return $this->assignedFrameworks()->where('frameworks.framework_id', $frameworkId)->exists();
+        return $this->assignedFrameworks()
+            ->where('frameworks.framework_id', $frameworkId)
+            ->exists();
     }
 }

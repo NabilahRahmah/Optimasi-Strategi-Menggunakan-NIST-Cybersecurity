@@ -1,23 +1,36 @@
 <?php
+
 namespace App\Http\Controllers\Approver;
- 
+
 use App\Http\Controllers\Controller;
 use App\Models\Assessment;
 use App\Models\Rekomendasi;
-use App\Models\Verifikasi;
- 
+use App\Models\FrameworkAssignment;
+
 class DashboardController extends Controller
 {
     public function index()
     {
+        $approverId = auth()->user()->user_id;
+
+        $frameworkIds = FrameworkAssignment::where('user_id', $approverId)
+            ->pluck('framework_id');
+
+        $myAssessments = Assessment::whereIn('framework_id', $frameworkIds);
+
         return view('approver.dashboard', [
-            'queue_review'       => Assessment::where('status', 'submitted')->count(),
-            'perlu_keputusan'    => Assessment::where('status', 'submitted')->count(),
-            'disetujui'          => Assessment::where('status', 'verified')->orWhere('status', 'completed')->count(),
-            'rekomendasi_terbuka'=> Rekomendasi::count(),
-            'pending_assessments'=> Assessment::with(['user', 'framework'])
-                                        ->where('status', 'submitted')
-                                        ->latest()->take(5)->get(),
+            'queue_review' => (clone $myAssessments)->where('status', 'submitted')->count(),
+            'perlu_keputusan' => (clone $myAssessments)->where('status', 'submitted')->count(),
+            'disetujui' => (clone $myAssessments)->where('status', 'disetujui')->count(),
+            'rekomendasi_terbuka' => Rekomendasi::whereHas(
+                'assessment',
+                fn($q) =>
+                $q->whereIn('framework_id', $frameworkIds)
+            )->count(),
+            'pending_assessments' => (clone $myAssessments)
+                ->with(['framework'])
+                ->where('status', 'submitted')
+                ->latest()->take(5)->get(),
         ]);
     }
 }

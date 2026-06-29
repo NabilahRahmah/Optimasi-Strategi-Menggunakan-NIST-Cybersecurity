@@ -36,25 +36,21 @@ class AssessmentController extends Controller
                 ->with('error', 'Silakan pilih framework terlebih dahulu.');
         }
 
-        // Kalau ada assessment_id spesifik → load itu langsung
+        // PERUBAHAN: Pencarian tunggal terintegrasi berdasarkan framework_id (Bukan user_id)
         if ($assessmentId) {
-            $assessment = Assessment::where('user_id', $user->user_id)
-                ->where('assessment_id', $assessmentId)
+            $assessment = Assessment::where('assessment_id', $assessmentId)
                 ->with('jawabans')
                 ->firstOrFail();
         } else {
-            // Cari yang sedang berjalan
-            $assessment = Assessment::where('user_id', $user->user_id)
-                ->where('framework_id', $frameworkId)
+            $assessment = Assessment::where('framework_id', $frameworkId)
                 ->whereIn('status', ['draft', 'submitted', 'in_review', 'ditolak'])
                 ->with('jawabans')
                 ->latest()
                 ->first();
 
-            // Kalau tidak ada → buat baru
+            // PERUBAHAN: Jika belum ada, buat satu lembar assessment terpadu untuk organisasi
             if (!$assessment) {
                 $assessment = Assessment::create([
-                    'user_id' => $user->user_id,
                     'framework_id' => $frameworkId,
                     'judul_assessment' => 'Self Assessment Q' . now()->quarter . ' ' . now()->year,
                     'tgl_pelaksanaan' => now()->toDateString(),
@@ -88,10 +84,13 @@ class AssessmentController extends Controller
             'files.*.*' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:5120',
         ]);
 
-        $assessment = Assessment::where('user_id', auth()->user()->user_id)
-            ->where('assessment_id', $request->assessment_id)
+        // PERUBAHAN: Query pencarian dilepas dari user_id
+        $assessment = Assessment::where('assessment_id', $request->assessment_id)
             ->whereIn('status', ['draft', 'ditolak'])
             ->firstOrFail();
+
+        // Keamanan tambahan: Pastikan user yang submit emang punya hak akses ke framework ini
+        abort_if(!auth()->user()->isAssignedTo($assessment->framework_id), 403, 'Akses ditolak.');
 
         $isDraft = $request->action === 'draft';
 
@@ -107,21 +106,17 @@ class AssessmentController extends Controller
                     'pertanyaan_id' => $pertanyaan_id,
                 ]);
 
-                // Reset ke pending kalau sebelumnya sudah diverif (ditolak)
-                if ($jawaban->status_verifikasi === 'ditolak') {
+                if (in_array($jawaban->status_verifikasi, ['ditolak', 'disetujui'])) {
                     $jawaban->status_verifikasi = 'pending';
                     $jawaban->komentar_approver = null;
                 }
 
-                // ✅ FIX: append file baru ke array yang sudah ada (bukan overwrite)
                 $pathList = $jawaban->file_bukti ?? [];
                 $namaList = $jawaban->nama_file_asli ?? [];
                 $ukuranList = $jawaban->ukuran_file ?? [];
 
-                // files[pertanyaan_id] adalah array file (multiple)
                 if ($request->hasFile("files.{$pertanyaan_id}")) {
                     $uploadedFiles = $request->file("files.{$pertanyaan_id}");
-                    // Pastikan array meski single file
                     $uploadedFiles = is_array($uploadedFiles) ? $uploadedFiles : [$uploadedFiles];
 
                     foreach ($uploadedFiles as $file) {
@@ -137,6 +132,9 @@ class AssessmentController extends Controller
                 $jawaban->file_bukti = $pathList;
                 $jawaban->nama_file_asli = $namaList;
                 $jawaban->ukuran_file = $ukuranList;
+
+                // PERUBAHAN: Catat siapa user yang mengisi/merubah baris jawaban ini
+                $jawaban->user_id = auth()->user()->user_id;
 
                 $jawaban->save();
             }
@@ -159,9 +157,10 @@ class AssessmentController extends Controller
 
     public function saveJawaban(Request $request, $assessment_id)
     {
-        $assessment = Assessment::where('user_id', auth()->user()->user_id)
-            ->where('assessment_id', $assessment_id)
-            ->firstOrFail();
+        // PERUBAHAN: Dilepas dari user_id
+        $assessment = Assessment::where('assessment_id', $assessment_id)->firstOrFail();
+
+        abort_if(!auth()->user()->isAssignedTo($assessment->framework_id), 403, 'Akses ditolak.');
 
         if (in_array($assessment->status, ['in_review', 'disetujui'])) {
             return response()->json([
@@ -217,6 +216,9 @@ class AssessmentController extends Controller
             $data['status_verifikasi'] = 'pending';
         }
 
+        // PERUBAHAN: Catat user pengubah pada auto-save individual AJAX
+        $data['user_id'] = auth()->user()->user_id;
+
         $jawaban->update($data);
 
         return response()->json([
@@ -229,8 +231,9 @@ class AssessmentController extends Controller
     {
         $jawaban = AssessmentJawaban::with('assessment')->findOrFail($jawaban_id);
 
+        // PERUBAHAN: Hak akses diganti dari "harus pembuat" jadi "siapapun yang dapet tugas framework ini"
         abort_if(
-            $jawaban->assessment->user_id !== auth()->user()->user_id,
+            !auth()->user()->isAssignedTo($jawaban->assessment->framework_id),
             403,
             'Akses ditolak.'
         );
@@ -269,14 +272,13 @@ class AssessmentController extends Controller
     {
         $jawaban = AssessmentJawaban::with('assessment')->findOrFail($jawaban_id);
 
-        // Guard: hanya pemilik assessment
+        // PERUBAHAN: Fleksibilitas hak akses berbasis pembagian framework
         abort_if(
-            $jawaban->assessment->user_id !== auth()->user()->user_id,
+            !auth()->user()->isAssignedTo($jawaban->assessment->framework_id),
             403,
             'Akses ditolak.'
         );
 
-        // Guard: tidak boleh hapus kalau assessment sedang direview/sudah final
         abort_if(
             in_array($jawaban->assessment->status, ['in_review', 'disetujui']),
             403,
@@ -296,13 +298,11 @@ class AssessmentController extends Controller
             return response()->json(['success' => false, 'message' => 'File tidak ditemukan.'], 404);
         }
 
-        // Hapus file fisik dari storage
         $filePath = storage_path('app/public/' . $pathList[$index]);
         if (file_exists($filePath)) {
             unlink($filePath);
         }
 
-        // Hapus dari array (reindex)
         array_splice($pathList, $index, 1);
         array_splice($namaList, $index, 1);
         array_splice($ukuranList, $index, 1);
@@ -311,6 +311,7 @@ class AssessmentController extends Controller
             'file_bukti' => array_values($pathList),
             'nama_file_asli' => array_values($namaList),
             'ukuran_file' => array_values($ukuranList),
+            'user_id' => auth()->user()->user_id, // Catat siapa yang menghapus
         ]);
 
         return response()->json([

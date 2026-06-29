@@ -27,7 +27,6 @@ class AssessmentController extends Controller
             ->where('is_active', true)     
             ->get();
 
-        // 2. Ambil array ID framework-nya (perhatikan pakai framework_id bukan id)    
         $frameworkIds = $frameworks->pluck('framework_id'); 
 
         $domains = Domain::whereIn('framework_id', $frameworkIds)
@@ -38,7 +37,6 @@ class AssessmentController extends Controller
                 }
             ])->orderBy('kode_domain')->get();
 
-        // User & Approver yang bisa di-assign
         $assignableUsers = User::whereIn('role', ['user', 'approver'])
             ->orderBy('name')
             ->get();
@@ -49,12 +47,9 @@ class AssessmentController extends Controller
     public function create(Request $request)
     {
         $domainId = $request->query('domain_id');
-
-        // Cari domain asal untuk tahu framework_id-nya
         $currentDomain = $domainId ? Domain::find($domainId) : null;
         $frameworkId = $currentDomain?->framework_id;
 
-        // Filter domain sesuai framework yang sama
         $domains = Domain::when($frameworkId, fn($q) => $q->where('framework_id', $frameworkId))
             ->orderBy('kode_domain')
             ->get();
@@ -92,13 +87,13 @@ class AssessmentController extends Controller
             'domains.kategoris.pertanyaans' => fn($q) => $q->orderBy('kode_pertanyaan'),
         ])->findOrFail($id);
 
+        // ✅ FIX: Hapus pencarian berdasarkan user_id, fokus ke framework saja
         $assessment = Assessment::firstOrCreate(
             [
-                'user_id' => auth()->user()->user_id,
                 'framework_id' => $id,
             ],
             [
-                'judul_assessment' => 'Admin Review - ' . $framework->name_framework,
+                'judul_assessment' => 'Assessment Terpadu - ' . $framework->name_framework,
                 'tgl_pelaksanaan' => now()->toDateString(),
                 'status' => 'draft',
             ]
@@ -148,8 +143,6 @@ class AssessmentController extends Controller
     {
         $kategoris = Kategori::with('domain')->orderBy('kode_kategori')->get();
         $selectedId = $request->query('kategori_id');
-
-        // Derive framework_id dari kategori yang dipilih
         $currentKategori = $selectedId ? Kategori::with('domain')->find($selectedId) : null;
         $frameworkId = $currentKategori?->domain?->framework_id;
 
@@ -232,9 +225,8 @@ class AssessmentController extends Controller
             'file_bukti' => 'nullable',
         ]);
 
-        $assessment = Assessment::where('user_id', auth()->user()->user_id)
-            ->where('framework_id', $framework_id)
-            ->firstOrFail();
+        // ✅ FIX: Pencarian dilepas dari user_id
+        $assessment = Assessment::where('framework_id', $framework_id)->firstOrFail();
 
         $jawaban = AssessmentJawaban::firstOrCreate([
             'assessment_id' => $assessment->assessment_id,
@@ -251,7 +243,6 @@ class AssessmentController extends Controller
             $data['komentar_approver'] = $request->komentar_approver;
         }
 
-        // Multi-file: append ke array yang sudah ada
         if ($request->hasFile('file_bukti')) {
             $uploadedFiles = $request->file('file_bukti');
             $uploadedFiles = is_array($uploadedFiles) ? $uploadedFiles : [$uploadedFiles];
@@ -306,20 +297,19 @@ class AssessmentController extends Controller
         $namaFile = $namas[$index] ?? basename($paths[$index]);
         $ext = strtolower(pathinfo($namaFile, PATHINFO_EXTENSION));
         $mimeMap = [
-            'pdf' => 'application/pdf',
-            'jpg' => 'image/jpeg',
+            'pdf'  => 'application/pdf',
+            'jpg'  => 'image/jpeg',
             'jpeg' => 'image/jpeg',
-            'png' => 'image/png',
-            'doc' => 'application/msword',
+            'png'  => 'image/png',
+            'doc'  => 'application/msword',
             'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         ];
 
         return response()->file($fullPath, [
-            'Content-Type' => $mimeMap[$ext] ?? 'application/octet-stream',
+            'Content-Type'        => $mimeMap[$ext] ?? 'application/octet-stream',
             'Content-Disposition' => 'inline; filename="' . $namaFile . '"',
         ]);
     }
-    
 
     // ══════════════════════════════════════
     //  ASSIGN USER & APPROVER KE FRAMEWORK
@@ -339,4 +329,4 @@ class AssessmentController extends Controller
         return redirect()->route('admin.assessment.index')
             ->with('success', 'Akses framework berhasil diperbarui!');
     }
-}
+} 

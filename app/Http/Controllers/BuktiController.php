@@ -11,12 +11,13 @@ class BuktiController extends Controller
         $jawaban = AssessmentJawaban::with('assessment')->findOrFail($jawaban_id);
         $user = auth()->user();
 
+        // ✅ FIX: Ganti pengecekan user_id ke isAssignedTo
         $boleh = match ($user->role) {
-            'user'        => $jawaban->assessment->user_id === $user->user_id,
-            'approver'    => true,
-            'admin'       => true,
+            'user' => $user->isAssignedTo($jawaban->assessment->framework_id),
+            'approver' => $user->isAssignedTo($jawaban->assessment->framework_id),
+            'admin' => true,
             'admin_super' => true,
-            default       => false,
+            default => false,
         };
 
         abort_if(!$boleh, 403, 'Akses ditolak.');
@@ -37,16 +38,16 @@ class BuktiController extends Controller
         $namaFile = $namas[$index] ?? basename($paths[$index]);
         $ext = strtolower(pathinfo($namaFile, PATHINFO_EXTENSION));
         $mimeMap = [
-            'pdf'  => 'application/pdf',
-            'jpg'  => 'image/jpeg',
+            'pdf' => 'application/pdf',
+            'jpg' => 'image/jpeg',
             'jpeg' => 'image/jpeg',
-            'png'  => 'image/png',
-            'doc'  => 'application/msword',
+            'png' => 'image/png',
+            'doc' => 'application/msword',
             'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         ];
 
         return response()->file($fullPath, [
-            'Content-Type'        => $mimeMap[$ext] ?? 'application/octet-stream',
+            'Content-Type' => $mimeMap[$ext] ?? 'application/octet-stream',
             'Content-Disposition' => 'inline; filename="' . $namaFile . '"',
         ]);
     }
